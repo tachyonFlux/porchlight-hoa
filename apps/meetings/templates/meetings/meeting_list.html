@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Meetings{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Meetings</h1>
+  <div class="actions">
+    <a class="btn" href="{% url 'meetings:calendar' %}">Add to my calendar</a>
+    {% if is_board %}<a class="btn" href="{% url 'meetings:poll_create' %}">New date poll</a><a class="btn primary" href="{% url 'meetings:meeting_create' %}">Add meeting</a>{% endif %}
+  </div>
+</div>
+
+{% if open_polls %}
+<div class="card">
+  <h2>Help pick a date</h2>
+  <ul class="list">{% for poll in open_polls %}
+    <li class="row"><span class="grow"><a href="{{ poll.get_absolute_url }}"><strong>{{ poll.title }}</strong></a>{% if poll.audience == 'board' %} <span class="badge">Board</span>{% endif %}
+      {% if poll.closes_at %}<br><small class="muted">Voting closes {{ poll.closes_at|date:"M j, g:i a" }}</small>{% endif %}</span>
+      {% if poll.pk in voted %}<span class="badge ok">You responded</span>{% else %}<a class="btn small primary" href="{{ poll.get_absolute_url }}">Vote</a>{% endif %}</li>
+  {% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Upcoming</h2>
+  <ul class="list">{% for m in upcoming %}{% include "meetings/_meeting_row.html" %}{% empty %}<li class="muted">Nothing scheduled yet.</li>{% endfor %}</ul>
+</div>
+{% if past %}
+<div class="card">
+  <h2>Past meetings</h2>
+  <ul class="list">{% for m in past %}{% include "meetings/_meeting_row.html" %}{% endfor %}</ul>
+</div>
+{% endif %}
+{% endblock %}

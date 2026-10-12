@@ -1,0 +1,11 @@
+Hello neighbor,
+
+{{ meeting.title }} is scheduled for {{ meeting.starts_at|date:"l, F j" }} at {{ meeting.starts_at|date:"g:i a" }}.
+{% if meeting.location %}
+Where: {{ meeting.location }}{% endif %}{% if meeting.virtual_link %}
+Join online: {{ meeting.virtual_link }}{% endif %}
+
+Details and calendar invite: {{ url }}
+
+Hope to see you there!
+{{ hoa.display_name }}

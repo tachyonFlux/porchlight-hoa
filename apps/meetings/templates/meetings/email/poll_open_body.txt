@@ -1,0 +1,10 @@
+Hello neighbor,
+
+We're planning "{{ poll.title }}" and want to find a time that works for as many people as possible. It takes about a minute:
+
+{{ url }}
+{% if poll.closes_at %}
+Please respond by {{ poll.closes_at|date:"l, F j, g:i a" }}.{% endif %}
+
+Thank you!
+{{ hoa.display_name }}

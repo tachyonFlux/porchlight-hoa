@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.community",
     "apps.dues",
+    "apps.meetings",
 ]
 
 MIDDLEWARE = [

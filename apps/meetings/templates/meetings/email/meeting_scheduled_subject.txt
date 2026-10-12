@@ -1,0 +1,1 @@
+{{ meeting.title }}: {{ meeting.starts_at|date:"D, M j, g:i a" }}

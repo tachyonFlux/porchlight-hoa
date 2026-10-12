@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.accounts.models import BoardPosition
 from apps.community.models import Home, Residency
 from apps.dues import services as dues_services
+from apps.meetings import services as meetings_services
 
 from . import audit, setup_token
 from .forms import HOASettingsForm, SetupForm, SetupNameForm
@@ -84,6 +85,18 @@ def dashboard(request):
     for r in residencies:
         r.balance = balances.get(r.home_id, 0)
     ctx = {"residencies": residencies}
+    if meetings_services.can_see(user, "residents"):
+        now = timezone.now()
+        ctx["next_meeting"] = (
+            meetings_services.visible_meetings(user)
+            .filter(ends_at__gte=now, cancelled_at__isnull=True)
+            .order_by("starts_at")
+            .first()
+        )
+        open_polls = meetings_services.visible_polls(user).filter(status="open")
+        ctx["polls_to_answer"] = [
+            p for p in open_polls.exclude(options__votes__user=user).distinct() if p.accepting_votes
+        ]
     if user.is_board:
         homes = Home.objects.filter(is_active=True)
         ctx["board_stats"] = {

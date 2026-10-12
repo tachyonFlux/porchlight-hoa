@@ -145,6 +145,7 @@ class Command(BaseCommand):
             )
 
         self._seed_dues(rng, admin, created_homes)
+        self._seed_meetings(rng, admin)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -187,3 +188,53 @@ class Command(BaseCommand):
             elif roll < 0.85:
                 dues.record_payment(home, 15000, "cash", paid_on, actor=admin)
         dues.apply_late_fees(today)
+
+    def _seed_meetings(self, rng, admin):
+        """A past meeting with minutes, an upcoming one, and an open date poll with votes."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.meetings.models import Audience, Meeting, Poll, PollOption, PollVote
+        from apps.meetings.services import resident_users
+
+        evening = timezone.localtime().replace(hour=19, minute=0, second=0, microsecond=0)
+        Meeting.objects.create(
+            title="Annual meeting",
+            kind=Meeting.Kind.ANNUAL,
+            created_by=admin,
+            starts_at=evening - timedelta(days=60),
+            ends_at=evening - timedelta(days=60, hours=-2),
+            location="Community clubhouse",
+            agenda="1. Welcome\n2. Budget review\n3. Board election",
+            minutes_text="Quorum present. Budget approved 24-2. Avery Alder re-elected president.",
+        )
+        Meeting.objects.create(
+            title="Board meeting",
+            kind=Meeting.Kind.BOARD,
+            audience=Audience.BOARD,
+            created_by=admin,
+            starts_at=evening + timedelta(days=12),
+            ends_at=evening + timedelta(days=12, hours=-1),
+            virtual_link="https://meet.example.com/lantern-hill",
+            agenda="Landscaping bids",
+        )
+        poll = Poll.objects.create(
+            title="Fall neighborhood meeting",
+            created_by=admin,
+            location="Community clubhouse",
+            description="Pick the evenings that work for you. We'll go with the most popular.",
+        )
+        options = [
+            PollOption.objects.create(
+                poll=poll,
+                starts_at=evening + timedelta(days=d),
+                ends_at=evening + timedelta(days=d, hours=-1),
+            )
+            for d in (21, 23, 28)
+        ]
+        for user in list(resident_users()[:14]):
+            for option in options:
+                PollVote.objects.create(
+                    option=option, user=user, choice=rng.choice(["yes", "yes", "maybe", "no"])
+                )

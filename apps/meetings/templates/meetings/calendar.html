@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Add meetings to your calendar</h1>
+  <p>Subscribe once and new meetings, changes, and cancellations show up in your calendar app automatically.</p>
+  <p><a class="btn primary block" href="{{ webcal_url }}">Subscribe on this device</a></p>
+  <p class="muted"><small>Or copy this link into Google Calendar ("Other calendars → From URL"), Outlook, or any app that supports calendar subscriptions:</small></p>
+  <input type="text" readonly value="{{ https_url }}" onclick="this.select()">
+  <p class="muted" style="margin-top:1rem"><small>This link is private to you. Anyone with it can see the meetings you can see. If you shared it by accident, make a new one:</small></p>
+  <form method="post">{% csrf_token %}<button class="small" type="submit">Make a new link</button></form>
+</div>
+{% endblock %}

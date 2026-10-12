@@ -18,3 +18,18 @@ def money_signed(cents):
 @register.filter
 def neg(value):
     return -int(value or 0)
+
+
+@register.filter
+def get_item(mapping, key):
+    return (mapping or {}).get(key, [])
+
+
+@register.filter
+def field(form, name):
+    return form[name]
+
+
+@register.filter
+def split(value, sep=" "):
+    return value.split(sep)

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ meeting.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ meeting.title }}</h1>
+  {% if meeting.cancelled_at %}<span class="badge danger">Cancelled</span>{% endif %}
+  <span class="badge">{{ meeting.get_kind_display }}</span>
+</div>
+<div class="grid sidebar">
+  <div>
+    <div class="card">
+      <p style="font-size:1.1rem"><strong>{{ meeting.starts_at|date:"l, F j, Y" }}</strong><br>{{ meeting.starts_at|date:"g:i a" }} – {{ meeting.ends_at|date:"g:i a" }}</p>
+      {% if meeting.location %}<p>📍 {{ meeting.location }}</p>{% endif %}
+      {% if meeting.virtual_link %}<p><a class="btn" href="{{ meeting.virtual_link }}" rel="noopener noreferrer" target="_blank">Join online</a></p>{% endif %}
+      <div class="actions"><a class="btn small" href="{% url 'meetings:meeting_ics' meeting.pk %}">Add to calendar (.ics)</a></div>
+    </div>
+    {% if meeting.agenda %}<div class="card"><h2>Agenda</h2><p>{{ meeting.agenda|linebreaksbr }}</p></div>{% endif %}
+    {% if meeting.minutes_text or meeting.minutes_file %}
+    <div class="card"><h2>Minutes</h2>
+      {% if meeting.minutes_text %}<p>{{ meeting.minutes_text|linebreaksbr }}</p>{% endif %}
+      {% if meeting.minutes_file %}<a class="btn small" href="{% url 'meetings:minutes_file' meeting.pk %}">Download minutes</a>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% if is_board %}
+  <div>
+    <div class="card">
+      <h2>Board</h2>
+      <div class="actions"><a class="btn small" href="{% url 'meetings:meeting_edit' meeting.pk %}">Edit / add minutes</a></div>
+      {% if not meeting.cancelled_at and not meeting.is_past %}
+      <form method="post" action="{% url 'meetings:meeting_cancel' meeting.pk %}" style="margin-top:1rem" onsubmit="return confirm('Cancel this meeting?')">{% csrf_token %}
+        <label style="font-weight:normal"><input type="checkbox" name="notify" value="1" checked> Email everyone</label>
+        <button class="small danger" type="submit">Cancel meeting</button>
+      </form>
+      {% endif %}
+      {% if meeting.poll %}<p class="muted" style="margin-top:1rem"><small>Scheduled from the poll <a href="{{ meeting.poll.get_absolute_url }}">{{ meeting.poll }}</a>.</small></p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

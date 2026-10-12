@@ -1,6 +1,7 @@
 {% with p=request.path %}
 <a href="{% url 'core:dashboard' %}" {% if p == '/' %}class="active"{% endif %}>Home</a>
 <a href="{% url 'dues:my_account' %}" {% if p == '/dues/' %}class="active"{% endif %}>Dues</a>
+<a href="{% url 'meetings:list' %}" {% if '/meetings' in p or '/polls' in p %}class="active"{% endif %}>Meetings</a>
 <a href="{% url 'community:directory' %}" {% if p == '/homes/' %}class="active"{% endif %}>Neighbors</a>
 {% if is_board %}
   {% if mobile %}<span class="nav-label">Board</span>{% endif %}

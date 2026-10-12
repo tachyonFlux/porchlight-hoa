@@ -26,6 +26,23 @@
   </div>
 {% endif %}
 
+{% if next_meeting or polls_to_answer %}
+<div class="grid two" style="margin-top:1rem">
+  {% if next_meeting %}
+  <a class="card" href="{{ next_meeting.get_absolute_url }}" style="text-decoration:none;color:inherit">
+    <h2 style="margin-top:0">Next meeting</h2>
+    <p><strong>{{ next_meeting.title }}</strong><br>{{ next_meeting.starts_at|date:"l, F j · g:i a" }}{% if next_meeting.location %}<br><small class="muted">{{ next_meeting.location }}</small>{% endif %}</p>
+  </a>
+  {% endif %}
+  {% for poll in polls_to_answer %}
+  <a class="card" href="{{ poll.get_absolute_url }}" style="text-decoration:none;color:inherit">
+    <h2 style="margin-top:0">When works for you?</h2>
+    <p>{{ poll.title }}</p><span class="btn small primary">Share your availability</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if is_board %}
   <h2>Board overview</h2>
   <div class="grid three">

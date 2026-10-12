@@ -1,0 +1,7 @@
+Hello neighbor,
+
+There's an update to {{ meeting.title }} ({{ meeting.starts_at|date:"l, F j, g:i a" }}).
+
+See the latest details: {{ url }}
+
+{{ hoa.display_name }}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}New date poll{% endblock %}
+{% block content %}
+<div class="page-head"><h1>New date poll</h1></div>
+<form method="post">{% csrf_token %}
+<div class="grid two">
+  <div class="card">
+    {% if form.non_field_errors %}<ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    {% for name in "title description audience location closes_at notify"|split:" " %}{% with field=form|field:name %}
+      <div class="field">{% if field.widget_type == 'checkbox' %}<label>{{ field }} {{ field.label }}</label>{% else %}{{ field.label_tag }}{{ field }}{% endif %}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{{ field.errors }}</div>
+    {% endwith %}{% endfor %}
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Possible times</h2>
+    <p class="muted"><small>Add up to 8. Empty rows are ignored.</small></p>
+    {% for d, s, e in form.option_rows %}
+      <div class="row option-row" style="gap:.4rem;margin-bottom:.5rem;flex-wrap:nowrap">
+        <div style="flex:2">{{ d }}</div><div style="flex:1">{{ s }}</div><div style="flex:1">{{ e }}</div>
+      </div>
+      {{ d.errors }}
+    {% endfor %}
+  </div>
+</div>
+<button class="primary" type="submit" style="margin-top:1rem">Create poll</button>
+</form>
+{% endblock %}

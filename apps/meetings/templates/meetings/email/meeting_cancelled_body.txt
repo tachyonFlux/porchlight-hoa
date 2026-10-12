@@ -1,0 +1,7 @@
+Hello neighbor,
+
+{{ meeting.title }}, planned for {{ meeting.starts_at|date:"l, F j, g:i a" }}, has been cancelled. We'll share a new date when there is one.
+
+{{ url }}
+
+{{ hoa.display_name }}

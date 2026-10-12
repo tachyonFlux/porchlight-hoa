@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}{{ poll.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ poll.title }}</h1>
+  {% if poll.accepting_votes %}<span class="badge ok">Open</span>{% else %}<span class="badge">Closed</span>{% endif %}
+  {% if is_board and poll.status == 'open' %}<a class="btn small primary" href="{% url 'meetings:poll_close' poll.pk %}">Pick the date</a>{% endif %}
+</div>
+{% if poll.description %}<p>{{ poll.description|linebreaksbr }}</p>{% endif %}
+<p class="muted">{% if poll.location %}📍 {{ poll.location }} · {% endif %}{{ voter_count }} {{ voter_count|pluralize:"person has,people have" }} responded{% if poll.closes_at %} · voting closes {{ poll.closes_at|date:"M j, g:i a" }}{% endif %}</p>
+
+{% if meeting %}
+<div class="callout">Meeting scheduled: <a href="{{ meeting.get_absolute_url }}"><strong>{{ meeting.starts_at|date:"l, F j, g:i a" }}</strong></a></div>
+{% endif %}
+
+<form method="post">{% csrf_token %}
+<div class="card">
+  <ul class="list">
+  {% for t, field in rows %}
+    <li>
+      <div class="row"><strong class="grow">{{ t.option }}</strong>
+        <small class="muted">{{ t.yes }} yes · {{ t.maybe }} maybe · {{ t.no }} no</small>
+        {% if suggested and suggested.pk == t.option.pk and poll.status == 'open' %}<span class="badge accent">Most popular</span>{% endif %}
+        {% if poll.chosen_option_id == t.option.pk %}<span class="badge ok">Chosen</span>{% endif %}</div>
+      {% if poll.accepting_votes %}
+      <div class="vote-choices" role="radiogroup" aria-label="{{ t.option }}">
+        {% for radio in field %}<label class="vote-choice">{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}
+      </div>
+      {% endif %}
+      {% if voters %}<small class="muted">{% for v in voters|get_item:t.option.pk %}{{ v.user }} ({{ v.get_choice_display|lower }}){% if not forloop.last %}, {% endif %}{% endfor %}</small>{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+  {% if poll.accepting_votes %}<button class="primary block" type="submit">Save my availability</button>{% endif %}
+</div>
+</form>
+{% if is_board and poll.status == 'open' %}
+<form method="post" action="{% url 'meetings:poll_delete' poll.pk %}" onsubmit="return confirm('Delete this poll and all its votes?')">{% csrf_token %}<button class="small danger" type="submit">Delete poll</button></form>
+{% endif %}
+<style>
+.vote-choices { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
+.vote-choice { font-weight: normal; border: 1px solid var(--border); border-radius: 999px; padding: .35rem .8rem; cursor: pointer; margin: 0; }
+.vote-choice:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); }
+.vote-choice input { margin-right: .3rem; }
+</style>
+{% endblock %}
