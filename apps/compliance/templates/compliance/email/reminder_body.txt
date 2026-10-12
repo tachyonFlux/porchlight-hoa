@@ -1,0 +1,9 @@
+Hello,
+
+A friendly reminder that "{{ deadline.title }}" is due on {{ deadline.due_date|date:"l, F j, Y" }}.
+{% if deadline.description %}
+{{ deadline.description }}
+{% endif %}
+When it's done, mark it complete so everyone knows: {{ url }}
+
+{{ hoa.display_name }}

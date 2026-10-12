@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Share links{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Share links</h1><a class="btn primary" href="{% url 'documents:share_create' %}">New share link</a></div>
+<p class="muted">Give someone outside the neighborhood (an agent, lender, or attorney) a link to specific documents, without an account. Links expire and can be revoked.</p>
+{% if new_link %}
+<div class="callout">
+  <strong>Link for {{ new_link.label }} is ready.</strong> Copy it now; for security it won't be shown again.<br>
+  <input type="text" readonly value="{{ new_link.url }}" onclick="this.select()" style="margin-top:.5rem">
+</div>
+{% endif %}
+<div class="card"><ul class="list">{% for l in links %}
+  <li class="row"><span class="grow"><a href="{% url 'documents:share_detail' l.pk %}"><strong>{{ l.label }}</strong></a><br>
+    <small class="muted">{{ l.documents.all|length }} document{{ l.documents.all|length|pluralize }} · {% if l.state == 'active' %}expires {{ l.expires_at|date:"M j, g:i a" }}{% else %}{{ l.state }}{% endif %} · {{ l.view_count }}{% if l.max_views %}/{{ l.max_views }}{% endif %} downloads</small></span>
+    <span class="badge {% if l.state == 'active' %}ok{% endif %}">{{ l.state|capfirst }}</span></li>
+{% empty %}<li class="empty">No share links yet.</li>{% endfor %}</ul></div>
+{% endblock %}

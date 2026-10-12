@@ -147,6 +147,7 @@ class Command(BaseCommand):
         self._seed_dues(rng, admin, created_homes)
         self._seed_meetings(rng, admin)
         self._seed_community_life(admin, created_homes)
+        self._seed_compliance_and_documents(admin)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -302,3 +303,36 @@ class Command(BaseCommand):
             "Landscaping contract renewal",
             "Our current contract ends in two months. Should we get new bids?",
         )
+
+    def _seed_compliance_and_documents(self, admin):
+        """Suggested deadlines and a few small sample PDFs."""
+        from django.core.files.base import ContentFile
+        from weasyprint import HTML
+
+        from apps.compliance import services as compliance
+        from apps.documents.models import Document, DocumentCategory
+
+        compliance.add_suggestions(admin)
+        samples = [
+            ("Bylaws", "Governing documents", "residents", "Article I. Name. The association shall be..."),
+            (
+                "Architectural guidelines",
+                "Rules & policies",
+                "residents",
+                "Fences may not exceed six feet...",
+            ),
+            ("2026 budget", "Budgets & financials", "residents", "Landscaping $18,000; Insurance $4,200..."),
+            ("Exterior request form", "Forms", "residents", "Describe your project and attach photos..."),
+            ("Insurance policy summary", "Insurance", "board", "General liability coverage of $1,000,000..."),
+        ]
+        for title, category, visibility, text in samples:
+            pdf = HTML(string=f"<h1>{title}</h1><p>Demo document. {text}</p>").write_pdf()
+            Document.objects.create(
+                title=title,
+                category=DocumentCategory.objects.filter(name=category).first(),
+                visibility=visibility,
+                file=ContentFile(pdf, name=f"{title.lower().replace(' ', '-')}.pdf"),
+                original_name=f"{title}.pdf",
+                file_size=len(pdf),
+                uploaded_by=admin,
+            )

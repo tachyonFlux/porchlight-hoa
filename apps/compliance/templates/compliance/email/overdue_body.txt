@@ -1,0 +1,7 @@
+Hello,
+
+"{{ deadline.title }}" was due on {{ deadline.due_date|date:"l, F j, Y" }} and isn't marked done yet.
+
+If it's already taken care of, mark it complete: {{ url }}
+
+{{ hoa.display_name }}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}New share link{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>New share link</h1>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">Create link</button><a class="btn" href="{% url 'documents:share_list' %}">Cancel</a></div>
+  </form>
+</div>
+{% endblock %}

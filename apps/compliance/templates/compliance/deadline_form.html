@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{% if deadline %}Edit deadline{% else %}Add deadline{% endif %}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if deadline %}Edit deadline{% else %}Add a deadline{% endif %}</h1>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">Save</button><a class="btn" href="{% url 'compliance:list' %}">Cancel</a>
+      {% if deadline %}<button class="danger" type="submit" name="delete" value="1" formnovalidate onclick="return confirm('Delete this deadline?')">Delete</button>{% endif %}</div>
+  </form>
+</div>
+{% endblock %}

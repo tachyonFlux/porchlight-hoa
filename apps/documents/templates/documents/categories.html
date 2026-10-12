@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Document categories{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Document categories</h1>
+  <ul class="list">{% for c in categories %}
+    <li class="row"><span class="grow">{{ c.name }} <small class="muted">(order {{ c.sort_order }})</small></span>
+      <form method="post" class="inline-form" onsubmit="return confirm('Remove this category?')">{% csrf_token %}<button class="small" name="delete" value="{{ c.pk }}" type="submit">Remove</button></form></li>
+  {% endfor %}</ul>
+  <h2>Add a category</h2>
+  <form method="post">{% csrf_token %}{% include "partials/form.html" %}<button class="primary" type="submit">Add</button></form>
+  <p style="margin-top:1rem"><a href="{% url 'documents:list' %}">Back to documents</a></p>
+</div>
+{% endblock %}

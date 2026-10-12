@@ -1,0 +1,12 @@
+<li class="row">
+  <div style="min-width:4.2rem;text-align:center;border-radius:10px;padding:.3rem .4rem;background:{% if d.urgency == 'overdue' %}var(--danger-soft){% elif d.urgency == 'soon' %}var(--warn-soft){% else %}var(--surface-2){% endif %}">
+    {% if d.urgency == 'overdue' %}<div style="font-weight:700;color:var(--danger)">{{ d.days_left|cut:"-" }}d</div><div style="font-size:.7rem">overdue</div>
+    {% elif d.days_left == 0 %}<div style="font-weight:700">Today</div>
+    {% else %}<div style="font-weight:700">{{ d.days_left }}d</div><div style="font-size:.7rem">left</div>{% endif %}
+  </div>
+  <span class="grow"><a href="{% url 'compliance:edit' d.pk %}"><strong>{{ d.title }}</strong></a><br>
+    <small class="muted">{{ d.due_date|date:"D, M j, Y" }} · {{ d.get_category_display }}{% if d.recurrence == 'yearly' %} · yearly{% endif %} · {% if d.owner %}{{ d.owner }}{% else %}whole board{% endif %}</small></span>
+  <form method="post" action="{% url 'compliance:complete' d.pk %}" class="inline-form">{% csrf_token %}
+    <input type="text" name="note" placeholder="Note (optional)" style="width:11rem;display:inline-block;min-height:34px;padding:.3rem .5rem">
+    <button class="small" type="submit">Done</button></form>
+</li>

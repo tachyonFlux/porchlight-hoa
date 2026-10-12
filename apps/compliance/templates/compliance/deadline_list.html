@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Compliance{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Compliance calendar</h1><a class="btn primary" href="{% url 'compliance:create' %}">Add deadline</a></div>
+<p class="muted">Filings, renewals and other dates the board can't miss. Reminders are emailed to the owner, or to the whole board.</p>
+
+{% if not has_any %}
+<div class="card">
+  <h2>Start with suggestions</h2>
+  <p>Add common deadlines for a Maryland HOA (annual report, taxes, insurance, annual meeting, budget, resale disclosures). They're <strong>starting points, not legal advice</strong>: each one tells you what to confirm, and you can edit or delete any of them.</p>
+  <form method="post" action="{% url 'compliance:suggestions' %}">{% csrf_token %}<button class="primary" type="submit">Add suggested Maryland deadlines</button></form>
+</div>
+{% endif %}
+
+{% if overdue %}<div class="card" style="border-color:var(--danger)"><h2 style="color:var(--danger)">Overdue</h2><ul class="list">{% for d in overdue %}{% include "compliance/_deadline_row.html" %}{% endfor %}</ul></div>{% endif %}
+{% if soon %}<div class="card"><h2>Next two weeks</h2><ul class="list">{% for d in soon %}{% include "compliance/_deadline_row.html" %}{% endfor %}</ul></div>{% endif %}
+{% if later %}<div class="card"><h2>Coming up</h2><ul class="list">{% for d in later %}{% include "compliance/_deadline_row.html" %}{% endfor %}</ul></div>{% endif %}
+{% if has_any and not overdue and not soon and not later %}<div class="card empty">Nothing open. Nice work!</div>{% endif %}
+
+{% if done %}
+<div class="card"><h2>Recently completed</h2><ul class="list">{% for d in done %}
+  <li class="row"><span class="grow">{{ d.title }}<br><small class="muted">Due {{ d.due_date|date:"M j, Y" }} · done {{ d.completed_at|date:"M j, Y" }}{% if d.completed_by %} by {{ d.completed_by }}{% endif %}{% if d.completion_note %} · {{ d.completion_note }}{% endif %}</small></span>
+    <form method="post" action="{% url 'compliance:reopen' d.pk %}" class="inline-form">{% csrf_token %}<button class="small" type="submit">Reopen</button></form></li>
+{% endfor %}</ul></div>
+{% endif %}
+{% if has_any %}<form method="post" action="{% url 'compliance:suggestions' %}" style="margin-top:1rem">{% csrf_token %}<button class="linkish" type="submit">Add any missing suggested Maryland deadlines</button></form>{% endif %}
+{% endblock %}

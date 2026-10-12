@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
@@ -8,6 +10,7 @@ from django.utils import timezone
 
 from apps.accounts.models import BoardPosition
 from apps.community.models import Home, Residency
+from apps.compliance.models import Deadline
 from apps.dues import services as dues_services
 from apps.exterior.models import ExteriorRequest
 from apps.meetings import services as meetings_services
@@ -116,6 +119,12 @@ def dashboard(request):
             .count(),
         }
         ctx["last_task_run"] = TaskRun.objects.first()
+        ctx["deadlines_due"] = [
+            d
+            for d in Deadline.objects.filter(
+                completed_at__isnull=True, due_date__lte=timezone.localdate() + timedelta(days=30)
+            )
+        ]
         ctx["requests_waiting"] = ExteriorRequest.objects.filter(
             status=ExteriorRequest.Status.SUBMITTED
         ).count()

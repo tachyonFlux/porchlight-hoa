@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Link unavailable{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>This link isn't available</h1>
+  <p>{% if link.state == 'expired' %}It has expired.{% elif link.state == 'revoked' %}It was turned off by the board.{% elif link.state == 'used up' %}It has reached its download limit.{% else %}It may have been mistyped, or it's no longer valid.{% endif %}
+  {% if hoa.contact_email %}Please contact {{ hoa.contact_email }} for a new one.{% else %}Please ask the person who sent it for a new one.{% endif %}</p>
+</div>
+{% endblock %}

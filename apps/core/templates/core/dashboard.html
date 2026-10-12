@@ -73,6 +73,12 @@
     </div>
   </div>
   {% endif %}
+  {% if deadlines_due %}
+  <div class="card" style="margin-top:1rem">
+    <div class="row"><h3 class="grow" style="margin:0">Compliance: next 30 days</h3><a href="{% url 'compliance:list' %}">All deadlines</a></div>
+    <ul class="list">{% for d in deadlines_due %}<li class="row"><span class="grow">{{ d.title }}</span><span class="badge {% if d.urgency == 'overdue' %}danger{% else %}warn{% endif %}">{% if d.days_left < 0 %}overdue{% elif d.days_left == 0 %}today{% else %}{{ d.days_left }} days{% endif %}</span></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
   <p class="muted" style="margin-top:1rem">
     {% if last_task_run %}Scheduled tasks last ran {{ last_task_run.started_at|timesince }} ago{% if not last_task_run.ok %} <span class="badge danger">with errors</span>{% endif %}.
     {% else %}Scheduled tasks haven't run yet. See the README for setting up the scheduler.{% endif %}

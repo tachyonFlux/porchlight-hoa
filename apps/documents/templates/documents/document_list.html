@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Documents</h1>
+  {% if is_board %}<div class="actions"><a class="btn" href="{% url 'documents:share_list' %}">Share links</a><a class="btn" href="{% url 'documents:categories' %}">Categories</a><a class="btn primary" href="{% url 'documents:create' %}">Upload</a></div>{% endif %}</div>
+{% for cat, docs in groups %}
+<div class="card">
+  <h2 style="margin-top:0">{{ cat|default:"Other" }}</h2>
+  <ul class="list">{% for d in docs %}
+    <li class="row"><span class="grow"><a href="{% url 'documents:download' d.pk %}"><strong>{{ d.title }}</strong></a>{% if d.visibility == 'board' %} <span class="badge">Board only</span>{% endif %}<br>
+      <small class="muted">{{ d.extension|upper }} · {{ d.file_size|filesizeformat }} · updated {{ d.updated_at|date:"M j, Y" }}{% if d.description %} · {{ d.description|truncatewords:16 }}{% endif %}</small></span>
+      {% if is_board %}<a class="btn small" href="{% url 'documents:share_create' %}?document={{ d.pk }}">Share</a><a class="btn small" href="{% url 'documents:edit' d.pk %}">Edit</a>{% endif %}</li>
+  {% endfor %}</ul>
+</div>
+{% empty %}<div class="card empty">No documents yet.</div>{% endfor %}
+{% endblock %}

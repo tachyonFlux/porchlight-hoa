@@ -4,11 +4,14 @@
 <a href="{% url 'dues:my_account' %}" {% if p == '/dues/' %}class="active"{% endif %}>Dues</a>
 <a href="{% url 'meetings:list' %}" {% if '/meetings' in p or '/polls' in p %}class="active"{% endif %}>Meetings</a>
 <a href="{% url 'exterior:list' %}" {% if '/requests' in p %}class="active"{% endif %}>Requests</a>
+<a href="{% url 'documents:list' %}" {% if p == '/documents/' %}class="active"{% endif %}>Documents</a>
 <a href="{% url 'community:directory' %}" {% if p == '/homes/' %}class="active"{% endif %}>Neighbors</a>
 {% if is_board %}
   {% if mobile %}<span class="nav-label">Board</span>{% else %}<details class="nav-dropdown"><summary {% if '/board/' in p %}class="active"{% endif %}>Board{% if board_unread %} <span class="badge accent">{{ board_unread }}</span>{% endif %}</summary><div class="nav-dropdown-menu">{% endif %}
   <a href="{% url 'messaging:board_room' %}" {% if '/board/room' in p %}class="active"{% endif %}>Board Room{% if board_unread and mobile %} <span class="badge accent">{{ board_unread }}</span>{% endif %}</a>
   <a href="{% url 'dues:overview' %}" {% if '/board/dues' in p %}class="active"{% endif %}>Treasurer</a>
+  <a href="{% url 'compliance:list' %}" {% if '/board/compliance' in p %}class="active"{% endif %}>Compliance</a>
+  <a href="{% url 'documents:share_list' %}" {% if '/board/share-links' in p %}class="active"{% endif %}>Share links</a>
   <a href="{% url 'community:board_homes' %}" {% if '/board/homes' in p %}class="active"{% endif %}>Homes</a>
   <a href="{% url 'community:people' %}" {% if '/board/people' in p %}class="active"{% endif %}>People</a>
   <a href="{% url 'messaging:notices' %}" {% if '/notices' in p %}class="active"{% endif %}>Courtesy notices</a>
