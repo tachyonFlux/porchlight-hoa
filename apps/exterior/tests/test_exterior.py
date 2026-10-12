@@ -9,7 +9,19 @@ from apps.exterior.models import ExteriorRequest, RequestEvent, RequestPhoto
 
 pytestmark = pytest.mark.django_db
 S = ExteriorRequest.Status
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+def _real_png():
+    from io import BytesIO
+
+    from PIL import Image
+
+    out = BytesIO()
+    Image.new("RGB", (4, 4), "teal").save(out, "PNG")
+    return out.getvalue()
+
+
+PNG = _real_png()
 
 
 def png(name="p.png"):

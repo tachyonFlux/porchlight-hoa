@@ -12,7 +12,7 @@
 </div>
 {% if is_board %}
 <div class="card"><form method="post" action="{% url 'messaging:notice_resolve' notice.pk %}">{% csrf_token %}
-  {% if notice.status == 'open' %}{% include "partials/form.html" with form=resolve_form %}<button type="submit">Mark resolved</button>{% else %}<button type="submit">Reopen</button>{% endif %}
+  {% if notice.status == 'open' %}{% include "partials/form.html" with form=resolve_form %}<button type="submit" name="action" value="resolve">Mark resolved</button>{% else %}<button type="submit" name="action" value="reopen">Reopen</button>{% endif %}
 </form></div>
 {% endif %}
 {% endblock %}

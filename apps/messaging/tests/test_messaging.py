@@ -100,10 +100,15 @@ class TestCourtesyNotices:
     def test_resolve_and_reopen(self, login, board_user, resident, home):
         notice = CourtesyNotice.objects.create(home=home, subject="Cans", body="Please")
         client = login(board_user)
-        client.post(reverse("messaging:notice_resolve", args=[notice.pk]), {"note": "Thanks!"})
+        client.post(
+            reverse("messaging:notice_resolve", args=[notice.pk]), {"action": "resolve", "note": "Thanks!"}
+        )
+        client.post(
+            reverse("messaging:notice_resolve", args=[notice.pk]), {"action": "resolve"}
+        )  # double click
         notice.refresh_from_db()
         assert notice.status == "resolved" and notice.resolved_by == board_user
-        client.post(reverse("messaging:notice_resolve", args=[notice.pk]))
+        client.post(reverse("messaging:notice_resolve", args=[notice.pk]), {"action": "reopen"})
         notice.refresh_from_db()
         assert notice.status == "open" and notice.resolved_at is None
         assert login(resident).post(reverse("messaging:notice_resolve", args=[notice.pk])).status_code == 403

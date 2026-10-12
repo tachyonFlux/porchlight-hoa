@@ -242,6 +242,7 @@ class Command(BaseCommand):
 
     def _seed_community_life(self, admin, homes):
         """Announcements, an exterior request in each state, a notice, a Board Room thread."""
+        from apps.accounts.models import board_members
         from apps.community.models import Residency
         from apps.exterior import services as exterior
         from apps.exterior.models import ExteriorRequest
@@ -278,14 +279,16 @@ class Command(BaseCommand):
             req = exterior.submit(
                 r.home, r.user, {"title": title, "category": category, "description": description}, []
             )
+            # Board members can't decide requests for their own home.
+            decider = next(u for u in board_members() if not exterior.can_act_as_household(u, req))
             if outcome == "approved":
                 exterior.board_set_status(
-                    req, admin, ExteriorRequest.Status.APPROVED, "Approved. Looks lovely!"
+                    req, decider, ExteriorRequest.Status.APPROVED, "Approved. Looks lovely!"
                 )
             elif outcome == "needs_info":
                 exterior.board_set_status(
                     req,
-                    admin,
+                    decider,
                     ExteriorRequest.Status.NEEDS_INFO,
                     "Could you share the shed's height and a photo of the spot?",
                 )

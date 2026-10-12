@@ -125,4 +125,44 @@ class MultipleImageField(forms.FileField):
         cleaned = [super(MultipleImageField, self).clean(f, initial) for f in files]
         for f in cleaned:
             validate_upload(f, allowed=IMAGE_TYPES)
-        return cleaned
+        return [strip_image_metadata(f) for f in cleaned]
+
+
+# Formats Pillow can re-encode. Re-encoding drops EXIF (GPS location, device serial...)
+# and anything appended to the file. HEIC can't be decoded without extra libraries, so
+# those are stored as uploaded.
+_REENCODE = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP", "gif": "GIF"}
+MAX_IMAGE_PIXELS = 50_000_000  # ~50 megapixels; bigger is rejected as a possible image bomb
+
+
+def strip_image_metadata(f):
+    """Return a cleaned copy of an uploaded image (same name), or the original if not re-encodable."""
+    import io
+    import warnings
+
+    from django.core.files.base import ContentFile
+    from PIL import Image, ImageOps
+
+    ext = os.path.splitext(f.name)[1].lower().lstrip(".")
+    fmt = _REENCODE.get(ext)
+    if fmt is None:
+        return f
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(f) as img:
+                if fmt == "GIF" and getattr(img, "is_animated", False):
+                    f.seek(0)
+                    return f  # keep animation; GIFs don't carry EXIF location data
+                img = ImageOps.exif_transpose(img)  # keep the photo the right way up
+                if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                out = io.BytesIO()
+                save_kwargs = {"quality": 90} if fmt in ("JPEG", "WEBP") else {}
+                img.save(out, fmt, **save_kwargs)
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ValidationError("That image is too large to process.") from exc
+    except Exception as exc:  # truncated or corrupt image
+        raise ValidationError("We couldn't read that image. Try a different file.") from exc
+    return ContentFile(out.getvalue(), name=os.path.basename(f.name))

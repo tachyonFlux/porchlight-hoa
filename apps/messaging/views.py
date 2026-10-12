@@ -66,8 +66,14 @@ def announcement_edit(request, pk):
         if form.is_valid():
             form.save()
             audit.record(request, "messaging.announcement_edited", item)
-            if form.cleaned_data["send_email"] and bulk_email_allowed(request.user):
-                services.email_announcement(item, request)
+            if form.cleaned_data["send_email"]:
+                if bulk_email_allowed(request.user):
+                    count = services.email_announcement(item, request)
+                    messages.info(request, f"Emailing {count} people.")
+                else:
+                    messages.error(
+                        request, "Saved, but not emailed: you've reached today's limit for mass emails."
+                    )
             messages.success(request, "Announcement saved.")
             return redirect(item)
     return render(request, "messaging/announcement_form.html", {"form": form, "item": item})
@@ -109,6 +115,11 @@ def notice_create(request):
         notice.save()
         audit.record(request, "messaging.notice_sent", notice, {"home": str(notice.home)})
         if form.cleaned_data["send_email"]:
+            if not services.notice_email_allowed(notice.home):
+                messages.error(
+                    request, "Saved, but not emailed: this home already got several notices today."
+                )
+                return redirect(notice)
             count = services.send_notice(notice, request)
             if not count:
                 messages.warning(request, "Nobody at this home has an account yet, so no email was sent.")
@@ -146,9 +157,14 @@ def notice_detail(request, pk):
 def notice_reply(request, pk):
     notice = _get_notice(request, pk)
     form = ReplyForm(request.POST)
-    if form.is_valid():
+    if not form.is_valid():
+        messages.error(request, "Please write a reply (up to 4,000 characters).")
+        return redirect(notice)
+    try:
         services.reply_to_notice(notice, request.user, form.cleaned_data["body"])
         messages.success(request, "Reply sent. Thank you!")
+    except ValueError as exc:
+        messages.error(request, str(exc))
     return redirect(notice)
 
 
@@ -156,11 +172,14 @@ def notice_reply(request, pk):
 @require_POST
 def notice_resolve(request, pk):
     notice = get_object_or_404(CourtesyNotice, pk=pk)
-    if notice.status == CourtesyNotice.Status.OPEN:
-        services.resolve_notice(notice, request.user, request.POST.get("note", "")[:300], request=request)
+    action = request.POST.get("action")
+    if action == "resolve":
+        services.set_notice_status(
+            notice, request.user, CourtesyNotice.Status.RESOLVED, request.POST.get("note", "")[:300], request
+        )
         messages.success(request, "Marked resolved.")
-    else:
-        services.reopen_notice(notice, request.user, request=request)
+    elif action == "reopen":
+        services.set_notice_status(notice, request.user, CourtesyNotice.Status.OPEN, request=request)
         messages.success(request, "Reopened.")
     return redirect(notice)
 
@@ -194,9 +213,11 @@ def thread_detail(request, pk):
             thread, request.user, form.cleaned_data["body"], notify=form.cleaned_data["notify"]
         )
         return redirect(thread)
-    services.mark_read(thread, request.user)
+    thread_messages = list(thread.messages.select_related("author"))
+    if thread_messages:
+        services.mark_read(thread, request.user, thread_messages[-1].created_at)
     return render(
         request,
         "messaging/thread_detail.html",
-        {"thread": thread, "thread_messages": thread.messages.select_related("author"), "form": form},
+        {"thread": thread, "thread_messages": thread_messages, "form": form},
     )

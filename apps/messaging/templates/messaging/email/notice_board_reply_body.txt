@@ -1,0 +1,9 @@
+Hello neighbor,
+
+The board replied about "{{ notice.subject }}":
+
+{{ reply.body }}
+
+See the conversation or reply: {{ url }}
+
+{{ hoa.display_name }}

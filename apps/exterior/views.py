@@ -58,7 +58,11 @@ def request_new(request):
     form = RequestForm(request.POST or None, request.FILES or None, homes=homes)
     if request.method == "POST" and form.is_valid():
         home = form.cleaned_data.get("home") or homes.first()
-        req = services.submit(home, request.user, form.cleaned_data, form.cleaned_data["photos"])
+        try:
+            req = services.submit(home, request.user, form.cleaned_data, form.cleaned_data["photos"])
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return render(request, "exterior/request_form.html", {"form": form})
         messages.success(
             request, "Thanks! Your request was sent to the board. You'll get an email when it's reviewed."
         )
@@ -73,7 +77,7 @@ def request_detail(request, pk):
     ctx = {
         "req": req,
         "events": services.visible_events(user, req),
-        "photos": req.photos.all(),
+        "photos": services.visible_photos(user, req),
         "household": services.can_act_as_household(user, req),
         "comment_form": CommentForm(show_board_only=user.is_board),
     }
@@ -145,6 +149,6 @@ def request_withdraw(request, pk):
 @login_required
 def photo(request, pk):
     item = get_object_or_404(RequestPhoto.objects.select_related("request__home"), pk=pk)
-    if not services.can_view(request.user, item.request):
+    if not services.can_view_photo(request.user, item):
         raise PermissionDenied
     return serve_private(item.image, f"photo-{item.pk}.{item.image.name.rsplit('.', 1)[-1]}")

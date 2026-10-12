@@ -35,7 +35,9 @@
     </div>
   </div>
   <div>
-    {% if status_form %}
+    {% if status_form and household %}
+    <div class="card"><p class="muted">This request is for your own home, so another board member needs to make the decision.</p></div>
+    {% elif status_form %}
     <div class="card"><h2>Board decision</h2>
       <form method="post" action="{% url 'exterior:status' req.pk %}">{% csrf_token %}
         {% include "partials/form.html" with form=status_form %}
