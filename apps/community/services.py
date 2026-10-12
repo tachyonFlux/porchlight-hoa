@@ -6,9 +6,11 @@ import re
 from dataclasses import asdict, dataclass, field
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
+from django.utils import timezone
 
 from .models import Home, HomeDetail, Residency, normalize_address
 
@@ -61,35 +63,64 @@ def can_edit_detail(user, detail):
 # ---------------------------------------------------------------- residents
 
 
+class InactiveUserError(Exception):
+    """The email belongs to a deactivated account; the board must reactivate it first."""
+
+
 def attach_resident(
     home, email, full_name="", phone="", relation=Residency.Relation.OWNER, source=Residency.Source.BOARD
 ):
     """Get or create the user and give them a current residency at `home`.
 
     Never overwrites a name or phone the person already set. Returns (user, created_residency).
+    Raises InactiveUserError for deactivated accounts.
     """
     email = email.strip().lower()
     user = User.objects.filter(email__iexact=email).first()
     if user is None:
-        user = User.objects.create_user(email=email, full_name=full_name, phone=phone)
-    else:
-        changed = []
-        if full_name and not user.full_name:
-            user.full_name = full_name
-            changed.append("full_name")
-        if phone and not user.phone:
-            user.phone = phone
-            changed.append("phone")
-        if changed:
-            user.save(update_fields=changed)
-    residency = Residency.objects.current().filter(home=home, user=user).first()
-    if residency:
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(email=email, full_name=full_name, phone=phone)
+        except IntegrityError:  # created concurrently
+            user = User.objects.get(email__iexact=email)
+    if not user.is_active:
+        raise InactiveUserError(email)
+    changed = []
+    if full_name and not user.full_name:
+        user.full_name = full_name
+        changed.append("full_name")
+    if phone and not user.phone:
+        user.phone = phone
+        changed.append("phone")
+    if changed:
+        user.save(update_fields=changed)
+    if Residency.objects.filter(home=home, user=user, ended_on__isnull=True).exists():
         return user, False
     is_first = not home.residencies.current().exists()
-    Residency.objects.create(
-        home=home, user=user, relation=relation, source=source, is_primary_contact=is_first
-    )
+    try:
+        with transaction.atomic():
+            Residency.objects.create(
+                home=home, user=user, relation=relation, source=source, is_primary_contact=is_first
+            )
+    except IntegrityError:  # attached concurrently
+        return user, False
     return user, True
+
+
+def end_residency(residency):
+    """End a residency; if it was the primary contact, promote the longest-standing resident."""
+    with transaction.atomic():
+        residency.ended_on = timezone.localdate()
+        was_primary = residency.is_primary_contact
+        residency.is_primary_contact = False
+        residency.save(update_fields=["ended_on", "is_primary_contact"])
+        if was_primary:
+            successor = (
+                Residency.objects.current().filter(home=residency.home).order_by("started_on", "id").first()
+            )
+            if successor:
+                successor.is_primary_contact = True
+                successor.save(update_fields=["is_primary_contact"])
 
 
 @transaction.atomic
@@ -103,28 +134,36 @@ def complete_claim(claim):
         relation=claim.relation,
         source=Residency.Source.CLAIM,
     )
-    type(invite).objects.filter(pk=invite.pk).update(use_count=F("use_count") + 1)
+    invite_model = type(invite)
+    invite_model.objects.filter(pk=invite.pk).update(use_count=F("use_count") + 1)
+    # Codes are single-use: once someone joins, the home gets a fresh code. Household
+    # members can see the new code on their home page to invite others in the household.
+    if invite.pk:
+        invite_model.objects.filter(pk=invite.pk, revoked_at__isnull=True).update(revoked_at=timezone.now())
+        invite_model.active_for(invite.home)
     return user, created
 
 
 # ---------------------------------------------------------------- CSV import
 
-HEADER_ALIASES = {
-    "address": {"address", "street address", "property address", "home", "street"},
-    "lot": {"lot", "lot #", "lot number", "lot no", "lot no.", "lot_number"},
-    "names": {
-        "owner",
-        "owners",
-        "owner name",
-        "owner names",
-        "owner name(s)",
-        "name",
-        "names",
-        "owner_names",
-    },
-    "email": {"email", "emails", "email address", "email addresses", "e-mail"},
-    "phone": {"phone", "phones", "phone number", "telephone", "phone numbers"},
-}
+
+def _header_target(name):
+    """Map a spreadsheet column name to one of our fields, or None."""
+    key = re.sub(r"[^a-z0-9#]+", " ", (name or "").lower()).strip()
+    words = set(key.split())
+    if "mail" in key:  # email, e-mail, Email Address, Owner 1 Email...
+        return "email"
+    if words & {"phone", "phones", "tel", "telephone", "mobile", "cell"}:
+        return "phone"
+    if words & {"lot", "lot#"} or key.startswith("lot"):
+        return "lot"
+    if words & {"address", "street", "property", "home"}:
+        return "address"
+    if words & {"name", "names", "owner", "owners", "owner(s)", "resident", "residents"}:
+        return "names"
+    return None
+
+
 MAX_IMPORT_ROWS = 2000
 MAX_IMPORT_BYTES = 2 * 1024 * 1024
 
@@ -163,15 +202,24 @@ def _split(value, pattern=r"[;,\n]"):
 def _map_headers(fieldnames):
     mapping = {}
     for raw in fieldnames or []:
-        key = re.sub(r"\s+", " ", (raw or "").strip().lower())
-        for target, aliases in HEADER_ALIASES.items():
-            if key in aliases and target not in mapping:
-                mapping[target] = raw
+        target = _header_target(raw)
+        if target and target not in mapping:
+            mapping[target] = raw
     if "address" not in mapping:
         raise CSVImportError(
             "Couldn't find an 'address' column. Expected columns: address, lot, owner name(s), email, phone."
         )
     return mapping
+
+
+def _pair(values, count):
+    """Split a cell into `count` parts: by semicolons/newlines, or by commas if that fits."""
+    parts = _split(values, r"[;\n]")
+    if len(parts) != count:
+        by_comma = _split(values, r"[;,\n]")
+        if len(by_comma) == count:
+            parts = by_comma
+    return parts
 
 
 def parse_residents_csv(uploaded):
@@ -187,11 +235,18 @@ def parse_residents_csv(uploaded):
     cols = _map_headers(reader.fieldnames)
 
     existing_homes = {a.lower() for a in Home.objects.values_list("address", flat=True)}
-    existing_emails = {e.lower() for e in User.objects.values_list("email", flat=True)}
+    users = dict(User.objects.values_list("email", "is_active"))
+    existing_emails = {e.lower(): active for e, active in users.items()}
     seen_addresses = {}
     rows = []
-    for i, record in enumerate(reader, start=2):
-        if i - 1 > MAX_IMPORT_ROWS:
+    warnings = []
+    if "email" not in cols:
+        warnings.append(
+            "No email column was found, so homes will be imported without residents. "
+            "Residents can still join with their invite codes."
+        )
+    for count, record in enumerate(reader, start=1):
+        if count > MAX_IMPORT_ROWS:
             raise CSVImportError(f"Too many rows (max {MAX_IMPORT_ROWS}).")
 
         def get(name, record=record):
@@ -201,29 +256,39 @@ def parse_residents_csv(uploaded):
         if not any((v or "").strip() for v in record.values() if isinstance(v, str)):
             continue  # blank line
         address = normalize_address(get("address"))
-        row = ImportRow(line=i, address=address, lot=get("lot"))
+        row = ImportRow(line=reader.line_num, address=address, lot=get("lot"))
         if not address:
             row.errors.append("Missing address.")
         elif address.lower() in seen_addresses:
             row.errors.append(f"Duplicate of line {seen_addresses[address.lower()]}.")
         else:
-            seen_addresses[address.lower()] = i
+            seen_addresses[address.lower()] = row.line
             row.home_exists = address.lower() in existing_homes
 
         emails = [e.lower() for e in _split(get("email"), r"[;,\s]+")]
-        names = _split(get("names"), r"[;\n]")
-        phones = _split(get("phone"), r"[;\n]")
+        names = _pair(get("names"), len(emails)) if emails else _split(get("names"), r"[;\n]")
+        phones = _pair(get("phone"), len(emails)) if emails else []
+        if emails and names and len(names) not in (1, len(emails)):
+            row.warnings.append(
+                f"{len(names)} names but {len(emails)} emails; names weren't matched to emails."
+            )
         for n, email in enumerate(emails):
             try:
                 validate_email(email)
-            except Exception:
+            except ValidationError:
                 row.errors.append(f"'{email}' isn't a valid email address.")
+                continue
+            if existing_emails.get(email) is False:
+                row.errors.append(f"{email} belongs to a deactivated account.")
                 continue
             if len(names) == len(emails):
                 name = names[n]
             else:
                 name = names[0] if len(names) == 1 else ""
-            phone = phones[n] if len(phones) == len(emails) else (phones[0] if n == 0 and phones else "")
+            if len(phones) == len(emails):
+                phone = phones[n]
+            else:
+                phone = phones[0] if n == 0 and phones else ""
             row.people.append(
                 ImportPerson(email=email, name=name, phone=phone, exists=email in existing_emails)
             )
@@ -232,7 +297,7 @@ def parse_residents_csv(uploaded):
                 "No email: the home is imported but names can't be linked until someone claims it."
             )
         rows.append(row)
-    return rows
+    return rows, warnings
 
 
 def rows_to_session(rows):
@@ -264,12 +329,15 @@ def apply_import(rows):
             home.save(update_fields=["lot_number"])
             stats["homes_updated"] += 1
         for person in row.people:
-            _, created = attach_resident(
-                home,
-                person.email,
-                full_name=person.name,
-                phone=person.phone,
-                source=Residency.Source.IMPORT,
-            )
+            try:
+                _, created = attach_resident(
+                    home,
+                    person.email,
+                    full_name=person.name,
+                    phone=person.phone,
+                    source=Residency.Source.IMPORT,
+                )
+            except InactiveUserError:
+                continue
             stats["residents_linked"] += int(created)
     return stats

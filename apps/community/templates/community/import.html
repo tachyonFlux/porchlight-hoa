@@ -13,6 +13,7 @@
   </form>
 </div>
 {% else %}
+{% for w in warnings %}<div class="callout" style="background:var(--warn-soft)">{{ w }}</div>{% endfor %}
 <div class="callout">{{ ok_count }} row{{ ok_count|pluralize }} ready to import{% if error_count %}, <strong>{{ error_count }} with problems</strong> (they'll be skipped){% endif %}.</div>
 <div class="card table-wrap">
   <table>

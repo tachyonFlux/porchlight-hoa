@@ -1,18 +1,16 @@
-import secrets
-
 from django import forms
-from django.conf import settings
 from django.contrib.auth import get_user_model, password_validation
 
 from apps.accounts.models import BoardPosition
 
+from . import setup_token
 from .models import HOASettings
 
 
 class HOASettingsForm(forms.ModelForm):
     class Meta:
         model = HOASettings
-        fields = ["name", "short_name", "contact_email", "mailing_address"]
+        fields = ["name", "short_name", "contact_email", "mailing_address", "require_board_two_step"]
         widgets = {"mailing_address": forms.Textarea(attrs={"rows": 3})}
 
 
@@ -31,17 +29,21 @@ class SetupForm(forms.Form):
         label="Setup token",
         required=False,
         widget=forms.PasswordInput,
-        help_text="The PORCHLIGHT_SETUP_TOKEN value from your server's environment.",
+        help_text="Printed in the server logs, and saved as setup-token.txt in the data folder "
+        "(or the PORCHLIGHT_SETUP_TOKEN value, if you set one).",
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not settings.SETUP_TOKEN:
+        if setup_token.required():
+            setup_token.get()  # make sure it exists and has been logged
+            self.fields["setup_token"].required = True
+        else:
             del self.fields["setup_token"]
 
     def clean_setup_token(self):
         value = self.cleaned_data.get("setup_token", "")
-        if not secrets.compare_digest(value, settings.SETUP_TOKEN):
+        if not setup_token.matches(value):
             raise forms.ValidationError("That setup token doesn't match.")
         return value
 

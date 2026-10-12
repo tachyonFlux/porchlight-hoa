@@ -47,7 +47,7 @@ for _dir in (DATA_DIR, MEDIA_ROOT):
     _dir.mkdir(parents=True, exist_ok=True)
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "porchlight.apps.OTPAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -150,6 +150,9 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 # Reverse proxy / HTTPS (Synology DSM reverse proxy, Caddy, Traefik, nginx...).
 BEHIND_PROXY = env_bool("PORCHLIGHT_BEHIND_PROXY", False)
+# How many proxies sit in front of the app (DSM reverse proxy = 1; Cloudflare + DSM = 2).
+# The client IP is taken that many hops from the right of X-Forwarded-For.
+TRUSTED_PROXY_COUNT = int(env("PORCHLIGHT_TRUSTED_PROXY_COUNT", "1"))
 SECURE_COOKIES = env_bool("PORCHLIGHT_SECURE_COOKIES", not DEBUG)
 SESSION_COOKIE_SECURE = SECURE_COOKIES
 CSRF_COOKIE_SECURE = SECURE_COOKIES
@@ -183,8 +186,17 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 MAGIC_LINK_TTL_MINUTES = int(env("PORCHLIGHT_MAGIC_LINK_TTL_MINUTES", "20"))
 CLAIM_LINK_TTL_HOURS = int(env("PORCHLIGHT_CLAIM_LINK_TTL_HOURS", "48"))
 
-# Optional token required to use the first-run setup wizard.
+# Token required by the first-run setup wizard. If unset (and DEBUG is off), one is
+# generated into DATA_DIR/setup-token.txt and printed to the logs.
 SETUP_TOKEN = env("PORCHLIGHT_SETUP_TOKEN", "")
+SETUP_TOKEN_REQUIRED = not DEBUG
+
+# Send sign-in and claim emails from a background thread so response timing doesn't
+# reveal whether an address belongs to someone.
+EMAIL_ASYNC = env_bool("PORCHLIGHT_EMAIL_ASYNC", True)
+
+# The Django admin is a low-level escape hatch. Off by default; when on, it requires TOTP.
+ENABLE_DJANGO_ADMIN = env_bool("PORCHLIGHT_ENABLE_DJANGO_ADMIN", False)
 
 OTP_TOTP_ISSUER = env("PORCHLIGHT_OTP_ISSUER", "Porchlight")
 

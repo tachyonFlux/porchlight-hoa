@@ -9,10 +9,11 @@ from django.utils import timezone
 from apps.accounts.models import BoardPosition
 from apps.community.models import Home, Residency
 
-from . import audit
+from . import audit, setup_token
 from .forms import HOASettingsForm, SetupForm, SetupNameForm
 from .models import AuditLog, HOASettings, TaskRun
 from .permissions import admin_required, board_required
+from .ratelimit import rate_limit
 
 
 def healthz(request):
@@ -27,6 +28,7 @@ def page_not_found(request, exception=None):
     return render(request, "core/404.html", status=404)
 
 
+@rate_limit("setup", limit=10, period=900)
 def setup(request):
     hoa = HOASettings.load()
     if hoa.setup_complete:
@@ -52,6 +54,10 @@ def setup(request):
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
         with transaction.atomic():
+            # Re-check under a row lock so two simultaneous submissions can't both win.
+            hoa = HOASettings.objects.select_for_update().get(pk=hoa.pk)
+            if hoa.setup_complete:
+                raise Http404
             user = User.objects.create_superuser(
                 email=data["email"], password=data["password1"], full_name=data["full_name"]
             )
@@ -60,6 +66,7 @@ def setup(request):
             hoa.setup_complete = True
             hoa.save()
             audit.record(user, "setup.completed", hoa)
+        setup_token.discard()
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         messages.success(request, "You're all set. Next, add your homes.")
         return redirect("core:dashboard")

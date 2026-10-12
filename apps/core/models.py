@@ -14,6 +14,11 @@ class HOASettings(models.Model):
     mailing_address = models.TextField(
         blank=True, help_text="Where residents mail checks. Printed on invoices."
     )
+    require_board_two_step = models.BooleanField(
+        "require two-step sign-in for the board",
+        default=False,
+        help_text="Board members must set up an authenticator app before using board pages.",
+    )
     setup_complete = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 

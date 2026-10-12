@@ -19,7 +19,8 @@ def _link_from_mail():
 
 
 def _totp_token(device):
-    return TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift).token()
+    token = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift).token()
+    return f"{token:06d}"  # token() is an int; keep leading zeros
 
 
 def _confirmed_device(user):

@@ -20,7 +20,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.core import audit
 from apps.core.email import send_templated
-from apps.core.permissions import admin_required, board_required
+from apps.core.permissions import admin_required, board_required, board_required_enrolling
 from apps.core.ratelimit import hit, rate_limit, too_many
 from apps.core.utils import absolute_url, client_ip
 
@@ -63,6 +63,7 @@ def send_magic_link(request, user, next_url=""):
         user.email,
         "accounts/email/magic_link",
         {"user": user, "link": absolute_url(path), "ttl": settings.MAGIC_LINK_TTL_MINUTES},
+        background=True,
     )
 
 
@@ -112,6 +113,9 @@ def password_login(request):
     form = PasswordLoginForm(request.POST or None)
     error = None
     if request.method == "POST" and form.is_valid():
+        # Also limit per account so a password can't be guessed from many IPs.
+        if not hit("password-login-email", form.cleaned_data["email"].lower(), limit=20, period=3600):
+            return too_many(request)
         user = authenticate(request, email=form.cleaned_data["email"], password=form.cleaned_data["password"])
         if user is not None:
             return complete_login(request, user, request.GET.get("next"))
@@ -197,14 +201,14 @@ class BoardPasswordChangeView(PasswordChangeView):
         return super().form_valid(form)
 
 
-password_change = board_required(BoardPasswordChangeView.as_view())
+password_change = board_required_enrolling(BoardPasswordChangeView.as_view())
 
 
 def _totp_qr_svg(device):
     return segno.make(device.config_url, error="m").svg_inline(scale=5, dark="#1f2a36")
 
 
-@board_required
+@board_required_enrolling
 def totp_setup(request):
     user = request.user
     if user.has_totp:

@@ -196,7 +196,7 @@ SAMPLE = """Address,Lot #,Owner Name(s),Email,Phone
 
 class TestCsvImport:
     def test_parse(self):
-        rows = services.parse_residents_csv(_csv(SAMPLE))
+        rows = services.parse_residents_csv(_csv(SAMPLE))[0]
         assert [r.ok for r in rows] == [True, True, True, False, False, False]
         first = rows[0]
         assert [(p.name, p.email, p.phone) for p in first.people] == [
@@ -208,23 +208,23 @@ class TestCsvImport:
         assert "Duplicate" in rows[5].errors[0]
 
     def test_apply_is_idempotent(self):
-        rows = services.parse_residents_csv(_csv(SAMPLE))
+        rows = services.parse_residents_csv(_csv(SAMPLE))[0]
         stats = services.apply_import(rows)
         assert stats == {"homes_created": 3, "homes_updated": 0, "residents_linked": 3, "skipped": 3}
-        again = services.apply_import(services.parse_residents_csv(_csv(SAMPLE)))
+        again = services.apply_import(services.parse_residents_csv(_csv(SAMPLE))[0])
         assert again["homes_created"] == 0 and again["residents_linked"] == 0
         assert Home.objects.count() == 3
         assert User.objects.count() == 3
         assert Residency.objects.filter(home__address="1 Oak Court").count() == 2
 
     def test_single_name_shared_by_multiple_emails(self):
-        rows = services.parse_residents_csv(
+        rows, _ = services.parse_residents_csv(
             _csv("address,owners,emails\n9 Pine Way,The Garcia Family,a@example.com;b@example.com\n")
         )
         assert [p.name for p in rows[0].people] == ["The Garcia Family"] * 2
 
     def test_updates_lot_and_matches_case_insensitively(self, home):
-        services.apply_import(services.parse_residents_csv(_csv("address,lot\n12 elm street,44\n")))
+        services.apply_import(services.parse_residents_csv(_csv("address,lot\n12 elm street,44\n"))[0])
         home.refresh_from_db()
         assert home.lot_number == "44"
         assert Home.objects.count() == 1
@@ -252,7 +252,7 @@ class TestCsvImport:
 
     def test_latin1_fallback(self):
         f = SimpleUploadedFile("x.csv", "address\n7 Caf\xe9 Row\n".encode("latin-1"))
-        rows = services.parse_residents_csv(f)
+        rows, _ = services.parse_residents_csv(f)
         assert rows[0].address == "7 Café Row"
 
 

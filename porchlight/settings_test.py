@@ -13,5 +13,8 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.StaticFilesStorage"  # noqa: F405
 SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = False
 SETUP_TOKEN = ""
+SETUP_TOKEN_REQUIRED = False
+EMAIL_ASYNC = False
+ENABLE_DJANGO_ADMIN = True
 STATIC_ROOT = DATA_DIR / "staticfiles"  # noqa: F405
 STATIC_ROOT.mkdir(parents=True, exist_ok=True)

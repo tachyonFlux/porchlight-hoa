@@ -1,0 +1,11 @@
+Hello,
+
+{{ new_user }} ({{ new_user.email }}) just linked their account to {{ home.address }} on {{ hoa.display_name }} using the home's invite code.
+
+If you know them, there's nothing to do. If this looks wrong, please let the board know so they can remove the account:
+
+{{ home_url }}
+
+The home's old invite code has been replaced with a new one.
+
+{{ hoa.display_name }}

@@ -3,17 +3,18 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.accounts.views import complete_login
 from apps.core import audit
 from apps.core.email import send_templated
+from apps.core.models import HOASettings
 from apps.core.permissions import board_required
-from apps.core.ratelimit import rate_limit
+from apps.core.ratelimit import hit, rate_limit, too_many
 from apps.core.utils import absolute_url, client_ip
 
 from . import services
@@ -59,17 +60,22 @@ def home_detail(request, pk):
     household = services.is_household_member(user, home)
     if not (user.is_board or household or (home.is_active and services.is_resident(user))):
         raise PermissionDenied
+    is_board = user.is_board
+    levels = services.editable_levels(user, home)
+    details = list(services.visible_details(user, home))
     ctx = {
         "home": home,
         "household": household,
-        "details": services.visible_details(user, home),
-        "can_add_detail": bool(services.editable_levels(user, home)),
-        "editable_ids": {d.pk for d in home.details.all() if services.can_edit_detail(user, d)},
-        "show_residents": user.is_board or household,
+        "details": details,
+        "can_add_detail": bool(levels),
+        "editable_ids": {d.pk for d in details if d.visibility in levels},
+        "show_residents": is_board or household,
         "residencies": home.current_residencies(),
     }
-    if user.is_board:
+    if household or is_board:
+        # Households see their code so they can invite others who live there.
         ctx["invite"] = HomeInvite.active_for(home, created_by=user)
+    if is_board:
         ctx["add_resident_form"] = AddResidentForm()
         ctx["past_residencies"] = home.residencies.exclude(ended_on__isnull=True).select_related("user")
     return render(request, "community/home_detail.html", ctx)
@@ -145,6 +151,7 @@ def claim_code(request, code):
             _, created = services.complete_claim(claim)
             audit.record(request, "home.claimed", home, {"email": request.user.email})
             if created:
+                _notify_claim(home, request.user)
                 messages.success(request, f"Welcome! You're now linked to {home}.")
             return redirect(home)
         return render(
@@ -156,17 +163,21 @@ def claim_code(request, code):
     form = ClaimForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
+        # Limit confirmation emails per code and per address so a code can't be used to spam.
+        if not (
+            hit("claim-invite", invite.code, limit=5, period=86400)
+            and hit("claim-email", data["email"], limit=3, period=86400)
+        ):
+            return too_many(request)
         _, raw = ClaimToken.issue(
             invite, data["email"], data["full_name"], data["relation"], ip=client_ip(request)
         )
+        # The email deliberately contains no text typed by the requester.
         send_templated(
             data["email"],
             "community/email/claim_confirm",
-            {
-                "name": data["full_name"],
-                "home": home,
-                "link": absolute_url(reverse("community:claim_confirm", args=[raw])),
-            },
+            {"home": home, "link": absolute_url(reverse("community:claim_confirm", args=[raw]))},
+            background=True,
         )
         request.session["claim_email"] = data["email"]
         return redirect("community:claim_sent")
@@ -184,13 +195,33 @@ def claim_confirm(request, token):
         return render(request, "community/claim_invalid.html", status=410)
     home = claim.invite.home
     if request.method == "POST":
-        if not claim.consume():
+        try:
+            with transaction.atomic():  # don't burn the token if attaching fails
+                if not claim.consume():
+                    return render(request, "community/claim_invalid.html", status=410)
+                user, created = services.complete_claim(claim)
+        except services.InactiveUserError:
             return render(request, "community/claim_invalid.html", status=410)
-        user, _ = services.complete_claim(claim)
         audit.record(user, "home.claimed", home, {"email": user.email})
+        if created:
+            _notify_claim(home, user)
         messages.success(request, f"Welcome! You're now linked to {home}.")
         return complete_login(request, user, home.get_absolute_url())
     return render(request, "community/claim_confirm.html", {"claim": claim, "home": home})
+
+
+def _notify_claim(home, new_user):
+    """Tell the rest of the household and the board that someone joined the home."""
+    recipients = {r.user.email for r in home.current_residencies() if r.user_id != new_user.pk}
+    hoa = HOASettings.load()
+    if hoa.contact_email:
+        recipients.add(hoa.contact_email)
+    if recipients:
+        send_templated(
+            sorted(recipients),
+            "community/email/claim_notice",
+            {"home": home, "new_user": new_user, "home_url": absolute_url(home.get_absolute_url())},
+        )
 
 
 # ------------------------------------------------------------------ board views
@@ -200,14 +231,16 @@ def claim_confirm(request, token):
 def board_homes(request):
     q = request.GET.get("q", "").strip()
     current = Q(residencies__ended_on__isnull=True, residencies__user__is_active=True)
-    homes = Home.objects.annotate(resident_count=Count("residencies", filter=current))
+    homes = Home.objects.all()
     if q:
+        # A subquery (not a join) so the resident count below isn't multiplied.
+        matching_people = Residency.objects.current().filter(
+            Q(user__full_name__icontains=q) | Q(user__email__icontains=q)
+        )
         homes = homes.filter(
-            Q(address__icontains=q)
-            | Q(lot_number__icontains=q)
-            | Q(residencies__user__full_name__icontains=q, residencies__ended_on__isnull=True)
-            | Q(residencies__user__email__icontains=q, residencies__ended_on__isnull=True)
-        ).distinct()
+            Q(address__icontains=q) | Q(lot_number__icontains=q) | Q(pk__in=matching_people.values("home_id"))
+        )
+    homes = homes.annotate(resident_count=Count("residencies", filter=current))
     show = request.GET.get("show", "")
     if show == "unclaimed":
         homes = homes.filter(resident_count=0, is_active=True)
@@ -247,7 +280,13 @@ def resident_add(request, pk):
     form = AddResidentForm(request.POST)
     if form.is_valid():
         d = form.cleaned_data
-        user, created = services.attach_resident(home, d["email"], d["full_name"], d["phone"], d["relation"])
+        try:
+            user, created = services.attach_resident(
+                home, d["email"], d["full_name"], d["phone"], d["relation"]
+            )
+        except services.InactiveUserError:
+            messages.error(request, f"{d['email']} belongs to a deactivated account.")
+            return redirect(home)
         audit.record(request, "home.resident_added", home, {"email": user.email})
         if created:
             messages.success(request, f"{user} added to {home}.")
@@ -263,9 +302,7 @@ def resident_add(request, pk):
 def residency_end(request, pk):
     residency = get_object_or_404(Residency.objects.select_related("home", "user"), pk=pk)
     if residency.ended_on is None:
-        residency.ended_on = timezone.localdate()
-        residency.is_primary_contact = False
-        residency.save(update_fields=["ended_on", "is_primary_contact"])
+        services.end_residency(residency)
         audit.record(request, "home.resident_removed", residency.home, {"email": residency.user.email})
         messages.success(request, f"{residency.user} is no longer linked to {residency.home}.")
     return redirect(residency.home)
@@ -337,10 +374,10 @@ def resident_import(request):
         return redirect("community:board_homes")
 
     form = ResidentImportForm(request.POST or None, request.FILES or None)
-    rows = None
+    rows, warnings = None, []
     if request.method == "POST" and form.is_valid():
         try:
-            rows = services.parse_residents_csv(form.cleaned_data["file"])
+            rows, warnings = services.parse_residents_csv(form.cleaned_data["file"])
         except services.CSVImportError as exc:
             form.add_error("file", str(exc))
         else:
@@ -352,6 +389,7 @@ def resident_import(request):
         {
             "form": form,
             "rows": rows,
+            "warnings": warnings,
             "ok_count": sum(1 for r in rows if r.ok) if rows else 0,
             "error_count": sum(1 for r in rows if not r.ok) if rows else 0,
         },

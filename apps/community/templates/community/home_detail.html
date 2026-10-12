@@ -51,6 +51,14 @@
       </ul>
       {% if household %}<p class="muted"><small>"Household only" details are visible to your household and the board. "Neighbors" details are visible to everyone in the neighborhood.</small></p>{% endif %}
     </div>
+
+    {% if household and not is_board %}
+    <div class="card">
+      <h2>Invite your household</h2>
+      <p>Someone else lives here? Give them this code to use at <a href="{% url 'community:claim_start' %}">the join page</a>. It works once; a new code appears after they join.</p>
+      <p class="code-box">{{ invite.display_code }}</p>
+    </div>
+    {% endif %}
   </div>
 
   {% if is_board %}

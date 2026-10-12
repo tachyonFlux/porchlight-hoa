@@ -153,6 +153,8 @@ class MagicLinkToken(models.Model):
     @classmethod
     def issue(cls, user, ip=None):
         raw = secrets.token_urlsafe(32)
+        # Only the newest link works; older unused ones are retired.
+        cls.objects.filter(user=user, used_at__isnull=True).update(expires_at=timezone.now())
         token = cls.objects.create(
             user=user,
             token_hash=hash_token(raw),
