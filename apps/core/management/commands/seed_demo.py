@@ -146,6 +146,7 @@ class Command(BaseCommand):
 
         self._seed_dues(rng, admin, created_homes)
         self._seed_meetings(rng, admin)
+        self._seed_community_life(admin, created_homes)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -238,3 +239,63 @@ class Command(BaseCommand):
                 PollVote.objects.create(
                     option=option, user=user, choice=rng.choice(["yes", "yes", "maybe", "no"])
                 )
+
+    def _seed_community_life(self, admin, homes):
+        """Announcements, an exterior request in each state, a notice, a Board Room thread."""
+        from apps.community.models import Residency
+        from apps.exterior import services as exterior
+        from apps.exterior.models import ExteriorRequest
+        from apps.messaging import services as messaging
+        from apps.messaging.models import Announcement, CourtesyNotice
+        from apps.messaging.notice_templates import TEMPLATES
+
+        Announcement.objects.create(
+            title="Welcome to our new neighborhood site",
+            pinned=True,
+            created_by=admin,
+            body="You can now check your dues, vote on meeting dates, and send exterior requests "
+            "all in one place. Questions? Reply to any email from us.",
+        )
+        Announcement.objects.create(
+            title="Spring cleanup day",
+            created_by=admin,
+            body="Join us at the entrance at 9 AM for mulching and planting. Coffee provided!",
+        )
+        with_people = [
+            r for r in Residency.objects.current().select_related("home", "user") if r.user_id != admin.pk
+        ][:4]
+        plans = [
+            ("Replace back fence", "fence", "6ft cedar privacy fence along the rear lot line.", None),
+            ("Paint front door", "paint", "Changing the door from white to a deep navy.", "approved"),
+            (
+                "Add a garden shed",
+                "structure",
+                "8x10 shed in the back corner, matching siding.",
+                "needs_info",
+            ),
+        ]
+        for r, (title, category, description, outcome) in zip(with_people, plans, strict=False):
+            req = exterior.submit(
+                r.home, r.user, {"title": title, "category": category, "description": description}, []
+            )
+            if outcome == "approved":
+                exterior.board_set_status(
+                    req, admin, ExteriorRequest.Status.APPROVED, "Approved. Looks lovely!"
+                )
+            elif outcome == "needs_info":
+                exterior.board_set_status(
+                    req,
+                    admin,
+                    ExteriorRequest.Status.NEEDS_INFO,
+                    "Could you share the shed's height and a photo of the spot?",
+                )
+        if len(with_people) > 3:
+            subject, body = TEMPLATES["trash"]
+            CourtesyNotice.objects.create(
+                home=with_people[3].home, subject=subject, body=body, created_by=admin
+            )
+        messaging.start_thread(
+            admin,
+            "Landscaping contract renewal",
+            "Our current contract ends in two months. Should we get new bids?",
+        )

@@ -1,0 +1,7 @@
+Hello,
+
+The household at {{ req.home.address }} withdrew their request "{{ req.title }}". No action is needed.
+
+{{ url }}
+
+{{ hoa.display_name }}

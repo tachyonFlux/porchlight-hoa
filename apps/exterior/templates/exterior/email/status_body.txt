@@ -1,0 +1,13 @@
+Hello neighbor,
+
+There's an update on your request "{{ req.title }}" for {{ req.home.address }}.
+
+Status: {{ req.get_status_display }}{% if note %}
+
+Note from the board:
+{{ note }}{% endif %}
+
+See the details or reply here: {{ url }}
+
+Thanks for checking with us!
+{{ hoa.display_name }}

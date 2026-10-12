@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Exterior requests{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Exterior change requests</h1>
+  {% if can_submit %}<a class="btn primary" href="{% url 'exterior:new' %}">New request</a>{% endif %}</div>
+<p class="muted">Planning to paint, add a fence, build a shed, or change your landscaping? Ask the board first. It's quick, and approval protects you if questions come up later.</p>
+<form class="search-form" method="get">
+  <select name="status"><option value="">All requests</option><option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
+    {% for v, l in statuses %}<option value="{{ v }}" {% if status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+  {% if is_board %}<select name="mine" style="width:auto"><option value="">Whole neighborhood</option><option value="1" {% if scope == 'mine' %}selected{% endif %}>My home</option></select>{% endif %}
+  <button type="submit">Filter</button>
+</form>
+<div class="card">
+  <ul class="list">{% for r in reqs %}
+    <li class="row"><span class="grow"><a href="{{ r.get_absolute_url }}"><strong>{{ r.title }}</strong></a><br>
+      <small class="muted">{{ r.home.address }} · {{ r.get_category_display }} · {{ r.created_at|date:"M j, Y" }}</small></span>
+      {% include "exterior/_status_badge.html" with s=r.status label=r.get_status_display %}</li>
+  {% empty %}<li class="empty">No requests yet.</li>{% endfor %}</ul>
+</div>
+{% endblock %}

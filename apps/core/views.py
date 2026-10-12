@@ -9,7 +9,10 @@ from django.utils import timezone
 from apps.accounts.models import BoardPosition
 from apps.community.models import Home, Residency
 from apps.dues import services as dues_services
+from apps.exterior.models import ExteriorRequest
 from apps.meetings import services as meetings_services
+from apps.messaging import services as messaging_services
+from apps.messaging.models import CourtesyNotice
 
 from . import audit, setup_token
 from .forms import HOASettingsForm, SetupForm, SetupNameForm
@@ -94,6 +97,11 @@ def dashboard(request):
             .first()
         )
         open_polls = meetings_services.visible_polls(user).filter(status="open")
+        ctx["announcements"] = list(messaging_services.visible_announcements(user)[:3])
+        my_homes = [r.home_id for r in residencies]
+        ctx["open_notices"] = list(
+            CourtesyNotice.objects.filter(home_id__in=my_homes, status=CourtesyNotice.Status.OPEN)
+        )
         ctx["polls_to_answer"] = [
             p for p in open_polls.exclude(options__votes__user=user).distinct() if p.accepting_votes
         ]
@@ -108,6 +116,9 @@ def dashboard(request):
             .count(),
         }
         ctx["last_task_run"] = TaskRun.objects.first()
+        ctx["requests_waiting"] = ExteriorRequest.objects.filter(
+            status=ExteriorRequest.Status.SUBMITTED
+        ).count()
         owing = [b for b in balances.values() if b > 0]
         ctx["dues_stats"] = {"homes_owing": len(owing), "total_owed": sum(owing)}
     return render(request, "core/dashboard.html", ctx)

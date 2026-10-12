@@ -1,0 +1,9 @@
+Hello neighbor,
+
+The board added a comment to your request "{{ req.title }}":
+
+{{ note }}
+
+Reply here: {{ url }}
+
+{{ hoa.display_name }}

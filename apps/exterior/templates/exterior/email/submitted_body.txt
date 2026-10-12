@@ -1,0 +1,11 @@
+Hello,
+
+{{ req.home.address }} submitted an exterior change request:
+
+{{ req.title }} ({{ req.get_category_display }})
+
+{{ req.description }}
+
+Review it here: {{ url }}
+
+{{ hoa.display_name }}

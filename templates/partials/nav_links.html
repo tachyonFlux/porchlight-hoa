@@ -1,15 +1,20 @@
 {% with p=request.path %}
 <a href="{% url 'core:dashboard' %}" {% if p == '/' %}class="active"{% endif %}>Home</a>
+<a href="{% url 'messaging:announcements' %}" {% if '/announcements' in p %}class="active"{% endif %}>News</a>
 <a href="{% url 'dues:my_account' %}" {% if p == '/dues/' %}class="active"{% endif %}>Dues</a>
 <a href="{% url 'meetings:list' %}" {% if '/meetings' in p or '/polls' in p %}class="active"{% endif %}>Meetings</a>
+<a href="{% url 'exterior:list' %}" {% if '/requests' in p %}class="active"{% endif %}>Requests</a>
 <a href="{% url 'community:directory' %}" {% if p == '/homes/' %}class="active"{% endif %}>Neighbors</a>
 {% if is_board %}
-  {% if mobile %}<span class="nav-label">Board</span>{% endif %}
+  {% if mobile %}<span class="nav-label">Board</span>{% else %}<details class="nav-dropdown"><summary {% if '/board/' in p %}class="active"{% endif %}>Board{% if board_unread %} <span class="badge accent">{{ board_unread }}</span>{% endif %}</summary><div class="nav-dropdown-menu">{% endif %}
+  <a href="{% url 'messaging:board_room' %}" {% if '/board/room' in p %}class="active"{% endif %}>Board Room{% if board_unread and mobile %} <span class="badge accent">{{ board_unread }}</span>{% endif %}</a>
   <a href="{% url 'dues:overview' %}" {% if '/board/dues' in p %}class="active"{% endif %}>Treasurer</a>
   <a href="{% url 'community:board_homes' %}" {% if '/board/homes' in p %}class="active"{% endif %}>Homes</a>
   <a href="{% url 'community:people' %}" {% if '/board/people' in p %}class="active"{% endif %}>People</a>
-  <a href="{% url 'accounts:board_list' %}" {% if '/board/members' in p %}class="active"{% endif %}>Board</a>
+  <a href="{% url 'messaging:notices' %}" {% if '/notices' in p %}class="active"{% endif %}>Courtesy notices</a>
+  <a href="{% url 'accounts:board_list' %}" {% if '/board/members' in p %}class="active"{% endif %}>Board members</a>
   {% if is_admin %}<a href="{% url 'core:settings' %}" {% if '/board/settings' in p %}class="active"{% endif %}>Settings</a>{% endif %}
+  {% if not mobile %}</div></details>{% endif %}
 {% endif %}
 <a href="{% url 'accounts:account' %}" {% if '/account' in p %}class="active"{% endif %}>Account</a>
 <form method="post" action="{% url 'accounts:logout' %}" class="inline-form">{% csrf_token %}<button class="linkish nav-signout" style="padding:.4rem .65rem;text-decoration:none;color:var(--muted)">Sign out</button></form>

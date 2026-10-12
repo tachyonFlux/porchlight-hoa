@@ -1,0 +1,5 @@
+{{ reply.author }} replied to "{{ notice.subject }}" ({{ notice.home.address }}):
+
+{{ reply.body }}
+
+{{ url }}

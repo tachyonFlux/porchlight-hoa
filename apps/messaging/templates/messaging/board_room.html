@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Board Room{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Board Room</h1><a class="btn primary" href="{% url 'messaging:thread_create' %}">New thread</a></div>
+<p class="muted">Private discussion for board members only.</p>
+<div class="card"><ul class="list">{% for t in threads %}
+  <li class="row"><span class="grow"><a href="{{ t.get_absolute_url }}">{% if t.unread %}<strong>{{ t.subject }}</strong>{% else %}{{ t.subject }}{% endif %}</a><br><small class="muted">Started by {{ t.created_by|default:"someone" }} · last activity {{ t.last_activity_at|timesince }} ago</small></span>
+    {% if t.unread %}<span class="badge accent">New</span>{% endif %}</li>
+{% empty %}<li class="empty">No threads yet.</li>{% endfor %}</ul></div>
+{% endblock %}

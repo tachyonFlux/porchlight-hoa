@@ -1,0 +1,5 @@
+{{ announcement.body }}
+
+Read it online: {{ url }}
+
+{{ hoa.display_name }}

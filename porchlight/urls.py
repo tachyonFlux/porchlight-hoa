@@ -10,6 +10,8 @@ urlpatterns = [
     path("", include("apps.community.urls")),
     path("", include("apps.dues.urls")),
     path("", include("apps.meetings.urls")),
+    path("", include("apps.exterior.urls")),
+    path("", include("apps.messaging.urls")),
 ]
 
 if settings.ENABLE_DJANGO_ADMIN:

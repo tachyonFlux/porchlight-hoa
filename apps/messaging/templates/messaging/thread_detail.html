@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ thread.subject }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ thread.subject }}</h1><a class="btn small" href="{% url 'messaging:board_room' %}">All threads</a></div>
+{% for m in thread_messages %}
+<div class="card"><small class="muted">{{ m.author|default:"Former member" }} · {{ m.created_at|date:"M j, Y g:i a" }}</small><p style="margin-top:.4rem">{{ m.body|linebreaksbr|urlize }}</p></div>
+{% endfor %}
+<div class="card"><form method="post">{% csrf_token %}{% include "partials/form.html" %}<button class="primary" type="submit">Reply</button></form></div>
+{% endblock %}

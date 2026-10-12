@@ -223,3 +223,16 @@ button.linkish { background: none; border: 0; color: var(--link); padding: 0; mi
   .page-break { break-after: page; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* ------------------------------------------------------------- board dropdown */
+.nav-dropdown { position: relative; }
+.nav-dropdown > summary {
+  list-style: none; cursor: pointer; padding: .4rem .65rem; border-radius: 8px; font-size: .95rem;
+}
+.nav-dropdown > summary::-webkit-details-marker { display: none; }
+.nav-dropdown > summary:hover, .nav-dropdown > summary.active { background: var(--surface-2); }
+.nav-dropdown-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); min-width: 200px; z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); padding: .35rem; display: flex; flex-direction: column;
+}

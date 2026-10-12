@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}New thread{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card"><h1>New Board Room thread</h1>
+  <form method="post">{% csrf_token %}{% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">Post</button><a class="btn" href="{% url 'messaging:board_room' %}">Cancel</a></div></form></div>
+{% endblock %}

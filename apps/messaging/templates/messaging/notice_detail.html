@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ notice.subject }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ notice.subject }}</h1><span class="badge {% if notice.status == 'resolved' %}ok{% else %}warn{% endif %}">{{ notice.get_status_display }}</span></div>
+<p class="muted">{{ notice.home.address }} · {{ notice.created_at|date:"F j, Y" }}{% if is_board and notice.created_by %} · from {{ notice.created_by }}{% endif %}{% if is_board %} · {% if notice.emailed_at %}emailed{% else %}not emailed{% endif %}{% endif %}</p>
+<div class="card"><p>{{ notice.body|linebreaksbr|urlize }}</p>
+  {% if notice.status == 'resolved' %}<p class="muted"><small>Resolved {{ notice.resolved_at|date:"M j, Y" }}{% if notice.resolution_note %}: {{ notice.resolution_note }}{% endif %}. Thank you!</small></p>{% endif %}</div>
+<div class="card"><h2>Conversation</h2>
+  <ul class="list">{% for r in replies %}<li><small class="muted">{{ r.author|default:"Someone" }} · {{ r.created_at|date:"M j, g:i a" }}</small><br>{{ r.body|linebreaksbr|urlize }}</li>{% empty %}<li class="muted">No replies yet.</li>{% endfor %}</ul>
+  <form method="post" action="{% url 'messaging:notice_reply' notice.pk %}" style="margin-top:1rem">{% csrf_token %}
+    {% include "partials/form.html" with form=reply_form %}<button class="primary" type="submit">Send reply</button></form>
+</div>
+{% if is_board %}
+<div class="card"><form method="post" action="{% url 'messaging:notice_resolve' notice.pk %}">{% csrf_token %}
+  {% if notice.status == 'open' %}{% include "partials/form.html" with form=resolve_form %}<button type="submit">Mark resolved</button>{% else %}<button type="submit">Reopen</button>{% endif %}
+</form></div>
+{% endif %}
+{% endblock %}

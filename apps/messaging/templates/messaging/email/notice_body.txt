@@ -1,0 +1,6 @@
+{{ notice.body }}
+
+You can reply or ask a question here: {{ url }}
+
+Thanks, neighbor!
+{{ hoa.display_name }}

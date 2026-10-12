@@ -1,0 +1,6 @@
+{{ message.author }} wrote in "{{ thread.subject }}":
+
+{{ message.body }}
+
+Reply in the Board Room: {{ url }}
+(Please reply on the site rather than by email, to keep board discussion in one place.)

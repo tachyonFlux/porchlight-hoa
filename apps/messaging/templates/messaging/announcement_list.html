@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Announcements{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Announcements</h1>
+  {% if is_board %}<a class="btn primary" href="{% url 'messaging:announcement_create' %}">New announcement</a>{% endif %}</div>
+{% for a in items %}
+<a class="card" href="{{ a.get_absolute_url }}" style="display:block;text-decoration:none;color:inherit">
+  <div class="row"><h2 class="grow" style="margin:0">{{ a.title }}</h2>
+    {% if a.pinned %}<span class="badge accent">Pinned</span>{% endif %}{% if a.audience == 'board' %}<span class="badge">Board</span>{% endif %}</div>
+  <p class="muted" style="margin:.25rem 0 .5rem"><small>{{ a.created_at|date:"M j, Y" }}{% if a.created_by %} · {{ a.created_by }}{% endif %}</small></p>
+  <p style="margin:0">{{ a.body|truncatewords:40 }}</p>
+</a>
+{% empty %}<div class="card empty">No announcements yet.</div>{% endfor %}
+{% endblock %}

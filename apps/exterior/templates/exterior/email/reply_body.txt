@@ -1,0 +1,9 @@
+Hello,
+
+The household at {{ req.home.address }} added a comment to "{{ req.title }}":
+
+{{ note }}
+
+{{ url }}
+
+{{ hoa.display_name }}

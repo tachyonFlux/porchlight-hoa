@@ -26,6 +26,17 @@
   </div>
 {% endif %}
 
+{% for n in open_notices %}
+<a class="callout" href="{{ n.get_absolute_url }}" style="display:block;text-decoration:none;color:inherit;margin-top:1rem">📬 A friendly note from the board: <strong>{{ n.subject }}</strong></a>
+{% endfor %}
+
+{% if announcements %}
+<div class="card" style="margin-top:1rem">
+  <div class="row"><h2 class="grow" style="margin:0">News</h2><a href="{% url 'messaging:announcements' %}">All</a></div>
+  <ul class="list">{% for a in announcements %}<li><a href="{{ a.get_absolute_url }}"><strong>{{ a.title }}</strong></a>{% if a.pinned %} <span class="badge accent">Pinned</span>{% endif %}<br><small class="muted">{{ a.created_at|date:"M j" }} · {{ a.body|truncatewords:18 }}</small></li>{% endfor %}</ul>
+</div>
+{% endif %}
+
 {% if next_meeting or polls_to_answer %}
 <div class="grid two" style="margin-top:1rem">
   {% if next_meeting %}
@@ -47,6 +58,7 @@
   <h2>Board overview</h2>
   <div class="grid three">
     <a class="card stat" href="{% url 'dues:overview' %}" style="text-decoration:none;color:inherit"><span class="num">{{ dues_stats.total_owed|money }}</span><span class="label">owed by {{ dues_stats.homes_owing }} home{{ dues_stats.homes_owing|pluralize }}</span></a>
+    <a class="card stat" href="{% url 'exterior:list' %}?status=submitted" style="text-decoration:none;color:inherit"><span class="num">{{ requests_waiting }}</span><span class="label">exterior request{{ requests_waiting|pluralize }} to review</span></a>
     <a class="card stat" href="{% url 'community:board_homes' %}" style="text-decoration:none;color:inherit"><span class="num">{{ board_stats.homes }}</span><span class="label">Homes</span></a>
     <a class="card stat" href="{% url 'community:people' %}" style="text-decoration:none;color:inherit"><span class="num">{{ board_stats.residents }}</span><span class="label">Residents signed up</span></a>
     <a class="card stat" href="{% url 'community:board_homes' %}?show=unclaimed" style="text-decoration:none;color:inherit"><span class="num">{{ board_stats.unclaimed }}</span><span class="label">Homes not yet claimed</span></a>

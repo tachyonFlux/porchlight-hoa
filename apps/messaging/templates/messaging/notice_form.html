@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}New courtesy notice{% endblock %}
+{% block content %}
+<div class="page-head"><h1>New courtesy notice</h1></div>
+<div class="grid sidebar">
+  <div class="card">
+    <form method="post">{% csrf_token %}
+      {% include "partials/form.html" %}
+      <div class="actions"><button class="primary" type="submit">Save notice</button><a class="btn" href="{% url 'messaging:notices' %}">Cancel</a></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Start from a friendly template</h2>
+    <ul class="list">{% for key, t in templates.items %}<li><a href="?template={{ key }}{% if request.GET.home %}&amp;home={{ request.GET.home|urlencode }}{% endif %}" {% if chosen == key %}style="font-weight:700"{% endif %}>{{ t.0 }}</a></li>{% endfor %}</ul>
+    <p class="muted"><small>Tip: lead with kindness and assume it's an oversight. A warm note gets better results than a stern one.</small></p>
+  </div>
+</div>
+{% endblock %}

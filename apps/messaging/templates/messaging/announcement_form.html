@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Edit announcement{% else %}New announcement{% endif %}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if item %}Edit announcement{% else %}New announcement{% endif %}</h1>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">{% if item %}Save{% else %}Post{% endif %}</button>
+      <a class="btn" href="{% if item %}{{ item.get_absolute_url }}{% else %}{% url 'messaging:announcements' %}{% endif %}">Cancel</a>
+      {% if item %}<button class="danger" type="submit" name="delete" value="1" formnovalidate onclick="return confirm('Delete this announcement?')">Delete</button>{% endif %}</div>
+  </form>
+</div>
+{% endblock %}

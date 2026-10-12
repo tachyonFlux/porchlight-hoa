@@ -1,0 +1,1 @@
+Request withdrawn: {{ req.title }} ({{ req.home.address }})

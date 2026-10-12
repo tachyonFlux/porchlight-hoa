@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ req.title }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ req.title }}</h1>{% include "exterior/_status_badge.html" with s=req.status label=req.get_status_display %}</div>
+<p class="muted">{{ req.home.address }} · {{ req.get_category_display }} · submitted {{ req.created_at|date:"M j, Y" }}{% if req.submitted_by %} by {{ req.submitted_by }}{% endif %}{% if req.planned_start %} · planned start {{ req.planned_start|date:"M j, Y" }}{% endif %}</p>
+
+{% if req.decision_note and req.status in 'approved denied' %}
+<div class="callout" {% if req.status == 'denied' %}style="background:var(--danger-soft)"{% else %}style="background:var(--ok-soft)"{% endif %}>
+  <strong>{{ req.get_status_display }}</strong>{% if req.decided_at %} on {{ req.decided_at|date:"M j, Y" }}{% endif %}<br>{{ req.decision_note|linebreaksbr }}</div>
+{% elif req.status == 'needs_info' and household %}
+<div class="callout" style="background:var(--warn-soft)">The board asked for a bit more information. Add a comment below and your request goes back into review.</div>
+{% endif %}
+
+<div class="grid sidebar">
+  <div>
+    <div class="card"><h2>Details</h2><p>{{ req.description|linebreaksbr|urlize }}</p>
+      {% if photos %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.5rem">
+        {% for p in photos %}<a href="{% url 'exterior:photo' p.pk %}" target="_blank" rel="noopener">{% if p.is_browser_image %}<img src="{% url 'exterior:photo' p.pk %}" alt="Photo {{ forloop.counter }}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">{% else %}<span class="btn small block">Photo {{ forloop.counter }} (HEIC)</span>{% endif %}</a>{% endfor %}
+      </div>{% endif %}
+    </div>
+    <div class="card"><h2>History</h2>
+      <ul class="list">{% for e in events %}
+        <li {% if e.board_only %}style="background:var(--warn-soft);padding:.6rem;border-radius:8px"{% endif %}>
+          <small class="muted">{{ e.created_at|date:"M j, Y g:i a" }} · {{ e.actor|default:"Someone" }}{% if e.board_only %} · board-only note{% endif %}</small><br>
+          {% if e.kind == 'status' %}Status: <strong>{{ e.to_status_label }}</strong>{% if e.note %}<br>{{ e.note|linebreaksbr|urlize }}{% endif %}
+          {% elif e.kind == 'submitted' %}Request submitted
+          {% else %}{{ e.note|linebreaksbr|urlize }}{% endif %}
+        </li>{% endfor %}</ul>
+      {% if req.status != 'withdrawn' %}
+      <form method="post" action="{% url 'exterior:comment' req.pk %}" enctype="multipart/form-data" style="margin-top:1rem">{% csrf_token %}
+        {% include "partials/form.html" with form=comment_form %}
+        <button class="primary" type="submit">Add comment</button>
+      </form>{% endif %}
+    </div>
+  </div>
+  <div>
+    {% if status_form %}
+    <div class="card"><h2>Board decision</h2>
+      <form method="post" action="{% url 'exterior:status' req.pk %}">{% csrf_token %}
+        {% include "partials/form.html" with form=status_form %}
+        <button class="primary block" type="submit">Update status</button>
+      </form>
+    </div>{% endif %}
+    {% if household and req.is_open %}
+    <div class="card"><form method="post" action="{% url 'exterior:withdraw' req.pk %}" onsubmit="return confirm('Withdraw this request?')">{% csrf_token %}
+      <p class="muted"><small>Changed your plans?</small></p><button class="small" type="submit">Withdraw request</button></form></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

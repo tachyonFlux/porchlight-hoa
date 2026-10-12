@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Courtesy notices{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Courtesy notices</h1>
+  {% if is_board %}<a class="btn primary" href="{% url 'messaging:notice_create' %}">New notice</a>{% endif %}</div>
+{% if scope == 'all' %}
+<form class="search-form" method="get"><select name="status"><option value="open" {% if status == 'open' %}selected{% endif %}>Open</option><option value="resolved" {% if status == 'resolved' %}selected{% endif %}>Resolved</option><option value="all" {% if status == 'all' %}selected{% endif %}>All</option></select><button type="submit">Filter</button></form>
+{% else %}
+<p class="muted">Friendly notes from the board about your home. Most are quick reminders; reply anytime if you have questions.</p>
+{% endif %}
+<div class="card"><ul class="list">{% for n in notices %}
+  <li class="row"><span class="grow"><a href="{{ n.get_absolute_url }}"><strong>{{ n.subject }}</strong></a><br><small class="muted">{{ n.home.address }} · {{ n.created_at|date:"M j, Y" }}</small></span>
+    <span class="badge {% if n.status == 'resolved' %}ok{% else %}warn{% endif %}">{{ n.get_status_display }}</span></li>
+{% empty %}<li class="empty">No notices.</li>{% endfor %}</ul></div>
+{% endblock %}

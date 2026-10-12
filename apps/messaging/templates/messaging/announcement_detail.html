@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ item.title }}</h1>
+  {% if is_board %}<a class="btn small" href="{% url 'messaging:announcement_edit' item.pk %}">Edit</a>{% endif %}</div>
+<p class="muted">{{ item.created_at|date:"F j, Y" }}{% if item.created_by %} · {{ item.created_by }}{% endif %}{% if is_board and item.emailed_at %} · emailed to {{ item.email_count }} people{% endif %}</p>
+<div class="card"><p>{{ item.body|linebreaksbr|urlize }}</p></div>
+<p><a href="{% url 'messaging:announcements' %}">All announcements</a></p>
+{% endblock %}
