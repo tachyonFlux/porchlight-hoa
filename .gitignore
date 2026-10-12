@@ -1,0 +1,37 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Runtime data: databases, uploads, imports. Never commit real HOA data.
+data/
+media/
+imports/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.csv
+*.ofx
+*.qfx
+!**/tests/fixtures/*.csv
+!**/tests/fixtures/*.ofx
+!**/tests/fixtures/*.qfx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+staticfiles/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local handoff notes
+HANDOFF.md

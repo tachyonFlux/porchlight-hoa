@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Almost there{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Almost there</h1>
+  <p>An administrator account already exists. Sign in with it to finish setting up.</p>
+  <a class="btn primary" href="{% url 'accounts:password_login' %}?next={% url 'core:setup' %}">Sign in</a>
+</div>
+{% endblock %}

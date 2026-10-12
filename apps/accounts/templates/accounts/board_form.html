@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Add board position{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Add a board position</h1>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">Add</button><a class="btn" href="{% url 'accounts:board_list' %}">Cancel</a></div>
+  </form>
+</div>
+{% endblock %}

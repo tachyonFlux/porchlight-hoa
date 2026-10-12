@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Import homes{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Import homes &amp; residents</h1></div>
+{% if not rows %}
+<div class="card" style="max-width:640px">
+  <p>Upload a CSV exported from your spreadsheet. The first row should have column names like:</p>
+  <p><code>address, lot, owner name(s), email, phone</code></p>
+  <p class="muted">Put two people in one row by separating names, emails, and phones with semicolons, e.g. <code>Pat Lee; Sam Lee</code>. You'll see a preview before anything is saved, and importing the same file twice won't create duplicates. The file itself isn't stored.</p>
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <button class="primary" type="submit">Preview import</button>
+  </form>
+</div>
+{% else %}
+<div class="callout">{{ ok_count }} row{{ ok_count|pluralize }} ready to import{% if error_count %}, <strong>{{ error_count }} with problems</strong> (they'll be skipped){% endif %}.</div>
+<div class="card table-wrap">
+  <table>
+    <thead><tr><th>Line</th><th>Address</th><th>Lot</th><th>People</th><th>Notes</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr {% if r.errors %}class="error"{% endif %}>
+        <td>{{ r.line }}</td>
+        <td>{{ r.address }} {% if r.home_exists %}<span class="badge">exists</span>{% else %}<span class="badge ok">new</span>{% endif %}</td>
+        <td>{{ r.lot }}</td>
+        <td>{% for p in r.people %}{{ p.name|default:"(no name)" }} &lt;{{ p.email }}&gt;{% if p.phone %} {{ p.phone }}{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+        <td>{% for e in r.errors %}<span style="color:var(--danger)">{{ e }}</span><br>{% endfor %}{% for w in r.warnings %}<small class="muted">{{ w }}</small><br>{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<form method="post" class="actions" style="margin-top:1rem">{% csrf_token %}
+  <button class="primary" type="submit" name="confirm" value="1" {% if not ok_count %}disabled{% endif %}>Import {{ ok_count }} row{{ ok_count|pluralize }}</button>
+  <a class="btn" href="{% url 'community:import' %}">Start over</a>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Link expired{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>This link has expired</h1>
+  <p>Sign-in links work once and only for a short while. You can request a new one.</p>
+  <a class="btn primary" href="{% url 'accounts:login' %}">Send a new link</a>
+</div>
+{% endblock %}

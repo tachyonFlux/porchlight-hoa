@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Confirm{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Almost done</h1>
+  <p>Link <strong>{{ claim.email }}</strong> to <strong>{{ home.address }}</strong>?</p>
+  <form method="post">{% csrf_token %}<button class="primary block" type="submit">Confirm and sign in</button></form>
+</div>
+{% endblock %}

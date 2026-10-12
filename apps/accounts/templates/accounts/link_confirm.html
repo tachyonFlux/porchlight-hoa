@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Welcome back</h1>
+  <p>Continue as <strong>{{ link_user.email }}</strong>?</p>
+  <form method="post">{% csrf_token %}
+    <button class="primary block" type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}

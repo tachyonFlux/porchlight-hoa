@@ -1,0 +1,9 @@
+Hi {{ name }},
+
+Thanks for joining {{ hoa.display_name }}! Confirm your email to link your account to {{ home.address }}:
+
+{{ link }}
+
+If you didn't ask for this, you can ignore this email.
+
+{{ hoa.display_name }}

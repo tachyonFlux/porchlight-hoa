@@ -1,0 +1,34 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#c2741c">
+  <title>{% block title %}{{ hoa.display_name }}{% endblock %} · {{ hoa.short_name|default:hoa.display_name }}</title>
+  <link rel="stylesheet" href="{% static 'css/porchlight.css' %}">
+  {% block head %}{% endblock %}
+  <script src="{% static 'js/htmx.min.js' %}" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <header class="site-header">
+    <div class="inner">
+      <a class="brand" href="{% if user.is_authenticated %}{% url 'core:dashboard' %}{% else %}{% url 'accounts:login' %}{% endif %}">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>{{ hoa.short_name|default:hoa.display_name }}</span>
+      </a>
+      {% if user.is_authenticated %}
+        <nav class="nav desktop" aria-label="Main">{% include "partials/nav_links.html" %}</nav>
+        <details class="menu-toggle">
+          <summary aria-label="Menu">Menu</summary>
+          <nav class="nav" aria-label="Main (mobile)">{% include "partials/nav_links.html" with mobile=True %}</nav>
+        </details>
+      {% endif %}
+    </div>
+  </header>
+  <main class="{% block main_class %}{% endblock %}">
+    {% include "partials/messages.html" %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">{{ hoa.display_name }} · Powered by Porchlight</footer>
+</body>
+</html>

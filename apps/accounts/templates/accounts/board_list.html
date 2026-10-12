@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Board{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Board members</h1>
+  {% if is_admin %}<a class="btn primary" href="{% url 'accounts:board_add' %}">Add a board position</a>{% endif %}
+</div>
+<div class="card">
+  <ul class="list">
+  {% for p in current %}
+    <li class="row">
+      <span class="grow"><strong>{{ p.display_title }}</strong><br>{{ p.user }} <small class="muted">· {{ p.user.email }} · since {{ p.started_on|date:"M Y" }}</small></span>
+      {% if is_admin %}
+      <form method="post" action="{% url 'accounts:board_end' p.pk %}" class="inline-form" onsubmit="return confirm('End this board position today?')">{% csrf_token %}
+        <button class="small" type="submit">End term</button>
+      </form>
+      {% endif %}
+    </li>
+  {% empty %}<li class="empty">No current board positions.</li>{% endfor %}
+  </ul>
+</div>
+{% if past %}
+<h2>Past positions</h2>
+<div class="card"><ul class="list">
+  {% for p in past %}<li>{{ p.display_title }}: {{ p.user }} <small class="muted">({{ p.started_on|date:"M Y" }} – {{ p.ended_on|date:"M Y" }})</small></li>{% endfor %}
+</ul></div>
+{% endif %}
+<p class="muted" style="margin-top:1rem">Site administrators can also manage settings and board positions.</p>
+{% endblock %}

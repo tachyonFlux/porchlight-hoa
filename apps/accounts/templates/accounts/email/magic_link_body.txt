@@ -1,0 +1,9 @@
+Hi{% if user.full_name %} {{ user.get_short_name }}{% endif %},
+
+Here's your link to sign in to {{ hoa.display_name }}:
+
+{{ link }}
+
+It works once and expires in {{ ttl }} minutes. If you didn't ask for this, you can ignore this email.
+
+{{ hoa.display_name }}

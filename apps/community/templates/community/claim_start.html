@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Join your neighborhood{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Join {{ hoa.display_name }}</h1>
+  <p>Enter the invite code from the letter the board sent to your home.</p>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <button class="primary block" type="submit">Continue</button>
+  </form>
+</div>
+<p class="muted" style="text-align:center;margin-top:1rem">Already joined? <a href="{% url 'accounts:login' %}">Sign in</a></p>
+{% endblock %}

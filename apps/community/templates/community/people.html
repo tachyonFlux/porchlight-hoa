@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block content %}
+<div class="page-head"><h1>People</h1></div>
+<form class="search-form" method="get"><input type="search" name="q" value="{{ q }}" placeholder="Name or email"><button type="submit">Search</button></form>
+<div class="card table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Home</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr><td>{{ u.full_name|default:"—" }}</td><td>{{ u.email }}</td><td>{{ u.phone }}</td>
+        <td>{% for r in u.current_residencies %}<a href="{{ r.home.get_absolute_url }}">{{ r.home.address }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}</td></tr>
+    {% empty %}<tr><td colspan="4" class="empty">Nobody found.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

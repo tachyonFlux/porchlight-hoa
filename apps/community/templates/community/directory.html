@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Neighbors{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Neighbors</h1></div>
+<form class="search-form" method="get"><input type="search" name="q" value="{{ q }}" placeholder="Search by address or lot"><button type="submit">Search</button></form>
+<div class="card">
+  <ul class="list">
+  {% for home in homes %}
+    <li>
+      <div class="row"><a class="grow" href="{{ home.get_absolute_url }}"><strong>{{ home.address }}</strong></a>
+        {% if home.lot_number %}<span class="badge">Lot {{ home.lot_number }}</span>{% endif %}
+        {% if home.pk in mine %}<span class="badge accent">Your home</span>{% endif %}</div>
+      {% for d in home.neighbor_details %}<small class="muted">{{ d.key }}: {{ d.value }}</small>{% if not forloop.last %} · {% endif %}{% endfor %}
+    </li>
+  {% empty %}<li class="empty">No homes found.</li>{% endfor %}
+  </ul>
+</div>
+{% endblock %}

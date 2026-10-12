@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Two-step sign in{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Turn on two-step sign in</h1>
+  <ol>
+    <li>Open an authenticator app (any app that supports TOTP codes).</li>
+    <li>Scan this code:
+      <div class="qr" style="margin:.75rem 0">{{ qr_svg|safe }}</div>
+      <small class="muted">Can't scan? Enter this key: <code style="word-break:break-all">{{ secret }}</code></small>
+    </li>
+    <li>Enter the 6-digit code the app shows.</li>
+  </ol>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <button class="primary" type="submit">Turn on</button>
+  </form>
+</div>
+{% endblock %}

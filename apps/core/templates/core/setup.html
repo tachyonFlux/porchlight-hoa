@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Welcome to Porchlight</h1>
+  {% if admin_exists %}
+    <p>One last thing: what's your neighborhood called?</p>
+  {% else %}
+    <p>Let's set up your neighborhood and your board account. You'll be the first administrator; you can add other board members afterwards.</p>
+  {% endif %}
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <button class="primary block" type="submit">Finish setup</button>
+  </form>
+</div>
+{% endblock %}

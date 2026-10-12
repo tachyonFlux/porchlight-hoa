@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Home detail{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if detail %}Edit detail{% else %}Add a detail{% endif %}</h1>
+  <p class="muted">{{ home.address }}</p>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <div class="actions">
+      <button class="primary" type="submit">Save</button>
+      <a class="btn" href="{{ home.get_absolute_url }}">Cancel</a>
+      {% if detail %}<button class="danger" type="submit" name="delete" value="1" formnovalidate onclick="return confirm('Remove this detail?')">Remove</button>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

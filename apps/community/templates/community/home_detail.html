@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ home.address }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ home.address }}</h1>
+  {% if home.lot_number %}<span class="badge">Lot {{ home.lot_number }}</span>{% endif %}
+  {% if not home.is_active %}<span class="badge warn">Inactive</span>{% endif %}
+  {% if is_board %}<a class="btn small" href="{% url 'community:home_edit' home.pk %}">Edit home</a>{% endif %}
+</div>
+
+<div class="grid sidebar">
+  <div>
+    {% if show_residents %}
+    <div class="card">
+      <h2>Household</h2>
+      <ul class="list">
+      {% for r in residencies %}
+        <li class="row">
+          <span class="grow">{{ r.user }}{% if r.is_primary_contact %} <span class="badge accent">Primary contact</span>{% endif %}<br>
+            <small class="muted">{{ r.get_relation_display }}{% if is_board %} · {{ r.user.email }}{% if r.user.phone %} · {{ r.user.phone }}{% endif %} · {{ r.get_source_display }}{% endif %}</small></span>
+          {% if is_board %}
+            {% if not r.is_primary_contact %}
+            <form method="post" action="{% url 'community:residency_primary' r.pk %}" class="inline-form">{% csrf_token %}<button class="small" type="submit">Make primary</button></form>
+            {% endif %}
+            <form method="post" action="{% url 'community:residency_end' r.pk %}" class="inline-form" onsubmit="return confirm('Remove {{ r.user|escapejs }} from this home?')">{% csrf_token %}<button class="small danger" type="submit">Remove</button></form>
+          {% endif %}
+        </li>
+      {% empty %}<li class="muted">Nobody has claimed this home yet.</li>{% endfor %}
+      </ul>
+      {% if is_board %}
+      <details style="margin-top:.75rem"><summary>Add a resident</summary>
+        <form method="post" action="{% url 'community:resident_add' home.pk %}" style="margin-top:.75rem">{% csrf_token %}
+          {% include "partials/form.html" with form=add_resident_form %}
+          <button class="primary" type="submit">Add resident</button>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="row"><h2 class="grow" style="margin:0">Home details</h2>
+        {% if can_add_detail %}<a class="btn small" href="{% url 'community:detail_add' home.pk %}">Add detail</a>{% endif %}</div>
+      <ul class="list">
+      {% for d in details %}
+        <li class="row"><span class="grow"><strong>{{ d.key }}</strong><br>{{ d.value|linebreaksbr }}</span>
+          <span class="badge {% if d.visibility == 'board' %}warn{% elif d.visibility == 'neighbors' %}ok{% endif %}">{{ d.get_visibility_display }}</span>
+          {% if d.pk in editable_ids %}<a class="btn small" href="{% url 'community:detail_edit' d.pk %}">Edit</a>{% endif %}
+        </li>
+      {% empty %}<li class="muted">No details shared yet.</li>{% endfor %}
+      </ul>
+      {% if household %}<p class="muted"><small>"Household only" details are visible to your household and the board. "Neighbors" details are visible to everyone in the neighborhood.</small></p>{% endif %}
+    </div>
+  </div>
+
+  {% if is_board %}
+  <div>
+    <div class="card">
+      <h2>Invite code</h2>
+      <p class="code-box">{{ invite.display_code }}</p>
+      <p><small class="muted">Residents can enter this code at <a href="{% url 'community:claim_start' %}">the claim page</a>, or open the link from the letter.</small></p>
+      <div class="actions">
+        <a class="btn small" href="{% url 'community:invite_letters' %}?home={{ home.pk }}" target="_blank">Print letter</a>
+        <form method="post" action="{% url 'community:invite_regenerate' home.pk %}" class="inline-form" onsubmit="return confirm('Make a new code? The current one will stop working.')">{% csrf_token %}<button class="small" type="submit">New code</button></form>
+      </div>
+    </div>
+    {% if home.notes %}<div class="card"><h2>Board notes</h2><p>{{ home.notes|linebreaksbr }}</p></div>{% endif %}
+    {% if past_residencies %}
+    <div class="card"><h2>Past residents</h2><ul class="list">
+      {% for r in past_residencies %}<li>{{ r.user }} <small class="muted">until {{ r.ended_on|date:"M j, Y" }}</small></li>{% endfor %}
+    </ul></div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

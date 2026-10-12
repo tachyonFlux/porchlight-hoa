@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Link this home{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ home.address }}</h1>
+  <p>Link this home to your account ({{ user.email }})?</p>
+  <form method="post">{% csrf_token %}
+    <div class="field"><label for="relation">You are the home's</label>
+      <select id="relation" name="relation">{% for v, l in relations %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+    <button class="primary block" type="submit">Link home</button>
+  </form>
+</div>
+{% endblock %}

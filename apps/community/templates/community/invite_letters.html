@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Invite letters{% endblock %}
+{% block content %}
+<div class="no-print page-head">
+  <h1>Invite letters</h1>
+  <form method="get" class="actions"><select name="homes" style="width:auto">
+    <option value="unclaimed" {% if scope == 'unclaimed' %}selected{% endif %}>Unclaimed homes</option>
+    <option value="all" {% if scope == 'all' %}selected{% endif %}>All active homes</option></select>
+    <button type="submit">Show</button>
+    <button type="button" class="primary" onclick="window.print()">Print</button></form>
+</div>
+<p class="no-print muted">{{ letters|length }} letter{{ letters|length|pluralize }}. Each one goes on its own page when printed.</p>
+{% for l in letters %}
+<section class="card page-break" style="max-width:680px;margin:0 auto 1.5rem">
+  <p class="muted">{{ hoa.display_name }}</p>
+  <h2 style="margin-top:0">To the residents of {{ l.home.address }}</h2>
+  <p>Hello neighbor! {{ hoa.display_name }} uses a private website for dues, meeting scheduling, announcements, and documents. Please join so you don't miss anything.</p>
+  <div class="row" style="align-items:flex-start;gap:1.5rem">
+    <div class="qr">{{ l.qr|safe }}</div>
+    <div class="grow">
+      <p><strong>Scan the code with your phone's camera</strong>, or go to:<br><span class="mono" style="word-break:break-all">{{ l.claim_url }}</span><br>and enter this code:</p>
+      <p class="code-box">{{ l.invite.display_code }}</p>
+    </div>
+  </div>
+  <p class="muted"><small>This code is for your household only. Questions? {% if hoa.contact_email %}Email {{ hoa.contact_email }}.{% else %}Contact any board member.{% endif %}</small></p>
+</section>
+{% empty %}<div class="card empty">No homes to print.</div>{% endfor %}
+{% endblock %}

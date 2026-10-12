@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Link not valid{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>That link isn't working</h1>
+  <p>The code may have been replaced, or the confirmation link may have expired. Try entering the code again, or contact the board for a new one.</p>
+  <a class="btn primary" href="{% url 'community:claim_start' %}">Enter a code</a>
+</div>
+{% endblock %}

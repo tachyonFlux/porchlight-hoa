@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Homes{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Homes</h1>
+  <div class="actions">
+    <a class="btn" href="{% url 'community:import' %}">Import CSV</a>
+    <a class="btn" href="{% url 'community:invite_letters' %}" target="_blank">Print invite letters</a>
+    <a class="btn primary" href="{% url 'community:home_create' %}">Add home</a>
+  </div>
+</div>
+<form class="search-form" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Address, lot, or resident">
+  <select name="show" style="width:auto"><option value="">All</option><option value="unclaimed" {% if show == 'unclaimed' %}selected{% endif %}>Unclaimed</option><option value="inactive" {% if show == 'inactive' %}selected{% endif %}>Inactive</option></select>
+  <button type="submit">Filter</button>
+</form>
+<div class="card table-wrap">
+  <table>
+    <thead><tr><th>Address</th><th>Lot</th><th class="num">Residents</th></tr></thead>
+    <tbody>
+    {% for h in homes %}
+      <tr><td><a href="{{ h.get_absolute_url }}">{{ h.address }}</a>{% if not h.is_active %} <span class="badge warn">Inactive</span>{% endif %}</td>
+        <td>{{ h.lot_number }}</td>
+        <td class="num">{% if h.resident_count %}{{ h.resident_count }}{% else %}<span class="badge">Unclaimed</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="3" class="empty">No homes yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

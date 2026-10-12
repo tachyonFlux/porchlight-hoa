@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Your account{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Your account</h1></div>
+<div class="grid two">
+  <div class="card">
+    <h2>Profile</h2>
+    <p class="muted">{{ user.email }}</p>
+    <form method="post">{% csrf_token %}
+      {% include "partials/form.html" %}
+      <button class="primary" type="submit">Save</button>
+    </form>
+  </div>
+  {% if is_board %}
+  <div class="card">
+    <h2>Board sign-in security</h2>
+    <ul class="list">
+      <li class="row"><span class="grow">Password<br><small class="muted">{% if has_password %}Set{% else %}Not set. You're using email links only.{% endif %}</small></span>
+        <a class="btn small" href="{% url 'accounts:password_change' %}">{% if has_password %}Change{% else %}Set password{% endif %}</a></li>
+      <li class="row"><span class="grow">Two-step sign in<br><small class="muted">{% if user.has_totp %}On{% else %}Off. Recommended for board members.{% endif %}</small></span>
+        {% if user.has_totp %}<a class="btn small" href="{% url 'accounts:totp_disable' %}">Turn off</a>{% else %}<a class="btn small" href="{% url 'accounts:totp_setup' %}">Turn on</a>{% endif %}</li>
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

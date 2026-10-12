@@ -1,0 +1,46 @@
+[project]
+name = "porchlight"
+version = "0.1.0"
+description = "Self-hosted management for self-managed HOAs"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "dj-database-url>=3.1.2",
+    "django>=5.2,<5.3",
+    "django-htmx>=1.29.0",
+    "django-otp>=1.7.4",
+    "gunicorn>=26.2.0",
+    "segno>=1.6.6",
+    "whitenoise>=6.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "factory-boy>=3.3.3",
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
+    "ruff>=0.17.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "porchlight.settings_test"
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+testpaths = ["apps"]
+filterwarnings = ["error::RuntimeWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["**/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S"]
+ignore = ["S101", "DJ008"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = ["S105", "S106"]
