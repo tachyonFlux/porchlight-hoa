@@ -92,6 +92,9 @@ class User(AbstractBaseUser, PermissionsMixin):
             return True
         return self.board_positions.current().exists()
 
+    def holds_title(self, *titles):
+        return self.is_active and self.board_positions.current().filter(title__in=titles).exists()
+
     @property
     def has_totp(self):
         return self.totpdevice_set.filter(confirmed=True).exists()
@@ -182,3 +185,11 @@ class MagicLinkToken(models.Model):
             used_at=timezone.now()
         )
         return updated == 1
+
+
+def board_members():
+    """Active users who are admins or hold a current board position."""
+    current = BoardPosition.objects.current().values("user_id")
+    return User.objects.filter(is_active=True).filter(
+        Q(pk__in=current) | Q(is_staff=True) | Q(is_superuser=True)
+    )

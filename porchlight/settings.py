@@ -74,6 +74,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "apps.core.middleware.SetupRequiredMiddleware",
+    "apps.core.middleware.BoardSecondFactorMiddleware",
 ]
 
 ROOT_URLCONF = "porchlight.urls"

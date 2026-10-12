@@ -17,7 +17,8 @@
       <ul class="list">{% for p in preview %}<li><strong>{{ p.label }}</strong><br><small class="muted">Invoices go out {{ p.issue|date:"M j, Y" }} · due {{ p.due|date:"M j, Y" }} · late after {{ p.late_after|date:"M j, Y" }}</small></li>{% endfor %}</ul>
       {% else %}<p class="muted">Set a billing start date to see the schedule.</p>{% endif %}
     </div>
-    <div class="card"><p class="muted"><small>Changes apply to billing periods created after you save. Existing invoices keep their amounts.</small></p></div>
+    <div class="card"><p class="muted"><small>Changes apply to billing periods created after you save; existing invoices keep their amounts and late-fee terms. If you change the frequency or first billing month, the new schedule starts with the first period that doesn't overlap one that already exists.</small></p>
+      <p class="muted"><small>Automatic invoices only go out for the current period. Older periods (for example if you set a start date in the past) can be billed by hand from Billing periods.</small></p></div>
   </div>
 </div>
 {% endblock %}

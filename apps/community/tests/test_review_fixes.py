@@ -164,3 +164,15 @@ def test_home_page_query_count_does_not_grow_with_details(
     client.get(home.get_absolute_url())  # warm up session/settings rows
     with django_assert_max_num_queries(20):
         client.get(home.get_absolute_url())
+
+
+def test_concurrent_second_claim_on_same_code_rejected(client, home):
+    from apps.community.models import ClaimToken, HomeInvite
+
+    invite = HomeInvite.active_for(home)
+    _, first = ClaimToken.issue(invite, "a@example.com")
+    _, second = ClaimToken.issue(invite, "b@example.com")
+    client.post(reverse("community:claim_confirm", args=[first]))
+    client.logout()
+    assert client.post(reverse("community:claim_confirm", args=[second])).status_code == 410
+    assert not Residency.objects.filter(user__email="b@example.com").exists()

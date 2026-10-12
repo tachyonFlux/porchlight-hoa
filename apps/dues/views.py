@@ -5,7 +5,7 @@ import segno
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -16,7 +16,7 @@ from apps.community.models import Home, Residency
 from apps.community.services import is_household_member
 from apps.core import audit
 from apps.core.models import HOASettings
-from apps.core.permissions import board_required
+from apps.core.permissions import board_required, treasurer_required
 from apps.core.ratelimit import rate_limit
 from apps.core.utils import absolute_url
 
@@ -37,12 +37,13 @@ def _can_view_home(user, home):
     return user.is_board or is_household_member(user, home)
 
 
-def _invoice_context(invoice):
+def _invoice_context(invoice, public=False):
     url = absolute_url(invoice.get_public_url())
     return {
         "invoice": invoice,
         "status": services.invoice_status(invoice),
-        "balance": services.balance(invoice.home),
+        # The public (QR) page shows only this invoice, never the household's other charges.
+        "balance": None if public else services.balance(invoice.home),
         "dues": DuesSettings.load(),
         "hoa": HOASettings.load(),
         "public_url": url,
@@ -59,9 +60,10 @@ def my_account(request):
     accounts = []
     for home in homes:
         rows = services.ledger_rows(home)
+        lines = services.lines_for_homes([home.pk])[home.pk]
         open_invoices = [
             s
-            for s in (services.invoice_status(i) for i in home.invoices.select_related("period")[:12])
+            for s in (services.invoice_status(i, lines=lines) for i in home.invoices.select_related("period"))
             if s.state != "paid"
         ]
         accounts.append(
@@ -74,9 +76,15 @@ def my_account(request):
 def invoice_public(request, token):
     """Reached from the QR code on a paper invoice. Shows only what's printed on it."""
     invoice = get_object_or_404(Invoice.objects.select_related("home", "period"), public_token=token)
-    ctx = _invoice_context(invoice)
-    ctx["can_sign_in"] = not request.user.is_authenticated
-    return render(request, "dues/invoice_public.html", ctx)
+    if timezone.localdate() > invoice.public_link_expires:
+        response = render(request, "dues/invoice_link_expired.html", status=410)
+    else:
+        ctx = _invoice_context(invoice, public=True)
+        ctx["can_sign_in"] = not request.user.is_authenticated
+        response = render(request, "dues/invoice_public.html", ctx)
+    response["Cache-Control"] = "private, no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 @login_required
@@ -100,9 +108,17 @@ def _render_invoices_html(invoices):
 
 
 def _pdf_response(invoices, filename):
-    from weasyprint import HTML  # imported lazily: it's slow to import and only needed here
+    # Imported lazily: WeasyPrint is slow to import and only needed here.
+    from weasyprint import HTML
+    from weasyprint.urls import URLFetcher
 
-    pdf = HTML(string=_render_invoices_html(invoices), base_url=absolute_url("/")).write_pdf()
+    class NoFetch(URLFetcher):
+        """Invoices are self-contained; never let rendered content fetch files or URLs."""
+
+        def fetch(self, url, headers=None):
+            raise ValueError("External resources are disabled for PDFs.")
+
+    pdf = HTML(string=_render_invoices_html(invoices), url_fetcher=NoFetch()).write_pdf()
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="{filename}"'
     return response
@@ -162,7 +178,9 @@ def report_csv(request):
         period = get_object_or_404(BillingPeriod, pk=int(request.GET["period"]))
     statuses = {s.invoice.home_id: s for s in services.statuses_for_period(period)} if period else {}
     balances = services.balances_by_home()
-    homes = Home.objects.filter(is_active=True).prefetch_related(
+    # Active homes, plus inactive ones that still have a balance, so totals match the report.
+    with_balance = [pk for pk, cents in balances.items() if cents]
+    homes = Home.objects.filter(Q(is_active=True) | Q(pk__in=with_balance)).prefetch_related(
         Prefetch(
             "residencies", queryset=Residency.objects.current().select_related("user"), to_attr="current"
         )
@@ -171,7 +189,7 @@ def report_csv(request):
     name = f"dues-{period.start:%Y-%m}" if period else f"balances-{timezone.localdate():%Y-%m-%d}"
     response["Content-Disposition"] = f'attachment; filename="{name}.csv"'
     writer = csv.writer(response)
-    header = ["address", "lot", "residents", "emails", "current_balance"]
+    header = ["address", "lot", "active", "residents", "emails", "current_balance"]
     if period:
         header += ["period", "invoiced", "late_fee", "paid", "unpaid", "status"]
     writer.writerow(header)
@@ -180,6 +198,7 @@ def report_csv(request):
         row = [
             _csv_safe(home.address),
             _csv_safe(home.lot_number),
+            "yes" if home.is_active else "no",
             _csv_safe("; ".join(str(r.user) for r in people)),
             _csv_safe("; ".join(r.user.email for r in people)),
             f"{balances.get(home.pk, 0) / 100:.2f}",
@@ -326,7 +345,7 @@ def waive_late_fee(request, pk):
     )
 
 
-@board_required
+@treasurer_required
 def dues_settings(request):
     settings_obj = DuesSettings.load()
     form = DuesSettingsForm(request.POST or None, instance=settings_obj)
@@ -334,6 +353,14 @@ def dues_settings(request):
         changed = {f: str(form.cleaned_data[f]) for f in form.changed_data}
         form.save()
         audit.record(request, "dues.settings_updated", settings_obj, changed)
+        payment_fields = {"payable_to", "payment_instructions"} & set(changed)
+        if payment_fields:
+            services.alert_board(
+                "Dues payment instructions changed",
+                f"{request.user} changed how residents are told to pay. New values: "
+                + "; ".join(f"{f.replace('_', ' ')}: {changed[f]!r}" for f in sorted(payment_fields)),
+                exclude=request.user,
+            )
         messages.success(request, "Dues settings saved. Changes apply to periods created from now on.")
         return redirect("dues:settings")
     preview = None
@@ -369,7 +396,11 @@ def period_list(request):
             messages.error(request, "Set the dues amount in dues settings first.")
             return redirect("dues:settings")
         spec = periods.period_containing(form.cleaned_data["date"], s.frequency, s.anchor_month, s.due_day)
-        period = services.ensure_period(spec, s)
+        try:
+            period = services.ensure_period(spec, s)
+        except services.PeriodOverlapError as exc:
+            messages.error(request, f"{exc} Pick a date in a period that doesn't exist yet.")
+            return redirect("dues:period_list")
         audit.record(request, "dues.period_created", period)
         return redirect("dues:period_detail", pk=period.pk)
     return render(request, "dues/period_list.html", {"periods": periods_qs, "form": form})

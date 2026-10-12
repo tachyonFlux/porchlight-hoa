@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Link expired{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>This invoice link has expired</h1>
+  <p>For privacy, invoice links stop working a while after the billing period ends. Residents can see all their invoices after signing in.</p>
+  <a class="btn primary" href="{% url 'accounts:login' %}">Sign in</a>
+</div>
+{% endblock %}

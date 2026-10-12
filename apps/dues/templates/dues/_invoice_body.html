@@ -14,7 +14,7 @@
     </tbody>
     <tfoot><tr><th>Amount due by {{ invoice.period.due_date|date:"M j, Y" }}</th><th class="num">{{ status.unpaid_cents|money }}</th></tr></tfoot>
   </table>
-  {% if balance != status.unpaid_cents %}<p class="inv-small">Total account balance for this home: {{ balance|money }}</p>{% endif %}
+  {% if balance is not None and balance != status.unpaid_cents %}<p class="inv-small">Total account balance for this home: {{ balance|money }}</p>{% endif %}
   <div class="inv-pay">
     <div>
       <div class="inv-label">How to pay</div>

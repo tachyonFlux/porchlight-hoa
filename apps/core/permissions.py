@@ -40,6 +40,8 @@ def _require(check, enforce_enrollment=True):
 
 board_required = _require(lambda u: u.is_board)
 admin_required = _require(lambda u: u.is_admin)
+# Money settings (where checks go, fee terms): admins and the treasurer only.
+treasurer_required = _require(lambda u: u.is_admin or u.holds_title("treasurer"))
 # For the pages a board member needs in order to turn two-step sign-in on.
 board_required_enrolling = _require(lambda u: u.is_board, enforce_enrollment=False)
 

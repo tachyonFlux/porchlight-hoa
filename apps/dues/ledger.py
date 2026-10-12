@@ -21,21 +21,28 @@ def running_balance(lines):
         yield line, balance
 
 
-def allocate(lines, as_of=None):
-    """Apply credits to charges oldest-first. Returns {charge_line_id: unpaid_cents}.
+DUES_KINDS = ("invoice",)
 
-    Only lines dated on or before `as_of` count (all lines if None). Credits pay off the
-    oldest charges first regardless of when the credit arrived, which is how most HOA
-    treasurers think about it: a payment settles the oldest open balance.
-    A reversal (e.g. a voided payment) is a positive line and simply cancels a credit.
+
+def allocate(lines, as_of=None):
+    """Apply credits to charges. Returns {charge_line_id: unpaid_cents}.
+
+    Only lines dated on or before `as_of` count (all lines if None).
+
+    Order: dues invoices first (oldest first), then everything else (late fees, manual
+    charges such as opening balances or fines), oldest first. Paying dues before fees means
+    an on-time dues payment is never treated as late because of an older, unrelated charge.
+    The total balance is the same either way; only which charge counts as "open" differs.
+
+    A late-fee waiver cancels its own invoice's fee. A voided payment's reversal (a
+    positive "payment_void" line) cancels the credit rather than acting as a charge.
     """
     relevant = [x for x in lines if as_of is None or x.date <= as_of]
     charges = sorted(
         (x for x in relevant if x.amount_cents > 0 and x.kind != "payment_void"),
-        key=lambda x: (x.date, x.id),
+        key=lambda x: (x.kind not in DUES_KINDS, x.date, x.id),
     )
     remaining = {c.id: c.amount_cents for c in charges}
-    # A waiver cancels its own invoice's late fee rather than going into the general pool.
     late_fee_by_invoice = {c.invoice_id: c.id for c in charges if c.kind == "late_fee"}
     pool = 0
     for x in relevant:

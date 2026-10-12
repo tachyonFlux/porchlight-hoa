@@ -1,0 +1,6 @@
+Hello,
+
+{{ message }}
+
+This message goes to all board members.
+{{ base_url }}/board/audit/

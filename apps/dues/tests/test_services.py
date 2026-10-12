@@ -10,7 +10,7 @@ from django.utils import timezone
 from apps.community.models import Home
 from apps.core.management.commands.daily_tasks import run_daily_tasks
 from apps.dues import services
-from apps.dues.models import DuesSettings, Invoice, LedgerEntry, ReminderLog
+from apps.dues.models import BillingPeriod, Invoice, LedgerEntry, ReminderLog
 
 from .conftest import DUE, ISSUE_DAY, LATE_AFTER
 
@@ -135,17 +135,14 @@ class TestLateFees:
         pay(home, 30000, LATE_AFTER + timedelta(days=1))
         assert services.apply_late_fees(LATE_AFTER + timedelta(days=10))["late_fees_applied"] == 1
 
-    def test_percent_of_unpaid_portion(self, billed, home, dues):
-        dues.late_fee_type = DuesSettings.LateFeeType.PERCENT
-        dues.late_fee_percent = Decimal("10")
-        dues.save()
+    def test_percent_of_unpaid_portion(self, billed, home):
+        BillingPeriod.objects.update(late_fee_type="percent", late_fee_percent=Decimal("10"))
         pay(home, 20000, date(2027, 1, 10))
         services.apply_late_fees(LATE_AFTER + timedelta(days=1))
         assert LedgerEntry.objects.get(kind="late_fee").amount_cents == 1000
 
-    def test_disabled(self, billed, dues):
-        dues.late_fee_type = DuesSettings.LateFeeType.NONE
-        dues.save()
+    def test_disabled(self, billed):
+        BillingPeriod.objects.update(late_fee_type="none")
         assert services.apply_late_fees(LATE_AFTER + timedelta(days=1))["late_fees_applied"] == 0
 
     def test_credit_from_earlier_covers_invoice(self, dues, home):
@@ -222,16 +219,24 @@ class TestReminders:
         assert ReminderLog.objects.filter(kind="upcoming").exists()
 
 
-def test_daily_tasks_twice_is_idempotent(dues, home, resident, other_home, monkeypatch):
-    day = timezone.make_aware(timezone.datetime(2027, 2, 15, 7, 0))
-    first = run_daily_tasks(now=day)
-    second = run_daily_tasks(now=day + timedelta(minutes=5))
+def test_daily_tasks_twice_is_idempotent(dues, home, resident, other_home):
+    def at(d):
+        return timezone.make_aware(timezone.datetime(d.year, d.month, d.day, 7, 0))
+
+    first = run_daily_tasks(now=at(ISSUE_DAY))
+    second = run_daily_tasks(now=at(ISSUE_DAY) + timedelta(minutes=5))
     assert first.ok and second.ok
     assert first.summary["dues"]["invoices_created"] == 2
-    assert first.summary["dues"]["late_fees_applied"] == 2
-    assert second.summary["dues"] == {
+    assert second.summary["dues"]["invoices_created"] == 0
+
+    late_day = LATE_AFTER + timedelta(days=1)
+    third = run_daily_tasks(now=at(late_day))
+    fourth = run_daily_tasks(now=at(late_day) + timedelta(minutes=5))
+    assert third.summary["dues"]["late_fees_applied"] == 2
+    assert fourth.summary["dues"] == {
         "invoices_created": 0,
         "late_fees_applied": 0,
+        "issued": 0,
         "upcoming": 0,
         "overdue": 0,
     }

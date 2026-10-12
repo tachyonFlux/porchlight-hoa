@@ -148,7 +148,11 @@ def claim_code(request, code):
             if relation not in Residency.Relation.values:
                 relation = Residency.Relation.OWNER
             claim = ClaimToken(invite=invite, email=request.user.email, relation=relation)
-            _, created = services.complete_claim(claim)
+            try:
+                with transaction.atomic():
+                    _, created = services.complete_claim(claim)
+            except (services.InactiveUserError, services.InviteAlreadyUsedError):
+                return render(request, "community/claim_invalid.html", status=410)
             audit.record(request, "home.claimed", home, {"email": request.user.email})
             if created:
                 _notify_claim(home, request.user)
@@ -200,7 +204,7 @@ def claim_confirm(request, token):
                 if not claim.consume():
                     return render(request, "community/claim_invalid.html", status=410)
                 user, created = services.complete_claim(claim)
-        except services.InactiveUserError:
+        except (services.InactiveUserError, services.InviteAlreadyUsedError):
             return render(request, "community/claim_invalid.html", status=410)
         audit.record(user, "home.claimed", home, {"email": user.email})
         if created:

@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.community.models import Home, Residency
 from apps.core import audit
-from apps.core.email import send_templated
+from apps.core.email import send_bulk, send_templated
 from apps.core.money import format_money, percent_of
 from apps.core.utils import absolute_url
 
@@ -29,11 +29,27 @@ K = LedgerEntry.Kind
 # ------------------------------------------------------------------ reading
 
 
-def _lines(home):
-    return [
-        ledger.Line(e.id, e.date, e.amount_cents, e.invoice_id, e.kind)
-        for e in LedgerEntry.objects.filter(home=home)
-    ]
+# Automatic jobs only act on recent periods. Anything older (a long scheduler outage, a
+# backdated billing start, a reactivated home) is left for the board to bill by hand, so
+# nobody is surprised by years of back-invoices or late fees.
+AUTO_BILL_WINDOW_DAYS = 31
+LATE_FEE_WINDOW_DAYS = 60
+ISSUED_EMAIL_WINDOW_DAYS = 30
+
+
+def lines_for_homes(home_ids, drop_voided=False):
+    """{home_id: [Line]} in one query. drop_voided removes voided payments and their reversals."""
+    qs = LedgerEntry.objects.filter(home_id__in=home_ids)
+    if drop_voided:
+        qs = qs.exclude(kind__in=[K.PAYMENT, K.PAYMENT_VOID], payment__voided_at__isnull=False)
+    result = {home_id: [] for home_id in home_ids}
+    for e in qs.only("id", "home_id", "date", "amount_cents", "invoice_id", "kind"):
+        result[e.home_id].append(ledger.Line(e.id, e.date, e.amount_cents, e.invoice_id, e.kind))
+    return result
+
+
+def _lines(home, drop_voided=False):
+    return lines_for_homes([home.pk], drop_voided)[home.pk]
 
 
 def balance(home, as_of=None):
@@ -94,11 +110,7 @@ def invoice_status(invoice, today=None, lines=None):
 
 def statuses_for_period(period, today=None):
     invoices = list(period.invoices.select_related("home", "period"))
-    lines_by_home = {}
-    for e in LedgerEntry.objects.filter(home__in=[i.home_id for i in invoices]):
-        lines_by_home.setdefault(e.home_id, []).append(
-            ledger.Line(e.id, e.date, e.amount_cents, e.invoice_id, e.kind)
-        )
+    lines_by_home = lines_for_homes({i.home_id for i in invoices})
     return [invoice_status(inv, today, lines_by_home.get(inv.home_id, [])) for inv in invoices]
 
 
@@ -113,6 +125,28 @@ def household_emails(home):
 
 
 # ------------------------------------------------------------------ board actions
+
+
+def alert_board(subject_line, message, exclude=None):
+    """Email every board member (except `exclude`) about a sensitive change."""
+    from apps.accounts.models import board_members
+
+    emails = board_members().exclude(pk=getattr(exclude, "pk", None)).values_list("email", flat=True)
+    send_bulk(emails, "dues/email/board_alert", {"subject_line": subject_line, "message": message})
+
+
+def _flag_own_home(actor, home, what):
+    """A board member changing their own household's ledger is allowed, but the rest of the
+    board is told, so nobody can quietly credit their own account."""
+    if actor is None or not getattr(actor, "is_authenticated", False):
+        return
+    if Residency.objects.current().filter(user=actor, home=home).exists():
+        alert_board(
+            f"{actor} changed their own dues ledger",
+            f"{actor} ({actor.email}) recorded this on their own home, {home}: {what}. "
+            "This is just a heads-up; it's in the audit log too.",
+            exclude=actor,
+        )
 
 
 @transaction.atomic
@@ -145,6 +179,7 @@ def record_payment(
         payment,
         {"home": str(home), "amount": format_money(amount_cents), "method": method, "check": check_number},
     )
+    _flag_own_home(actor, home, f"a {format_money(amount_cents)} payment")
     return payment
 
 
@@ -171,6 +206,7 @@ def void_payment(payment, reason, actor=None, request=None):
         payment,
         {"amount": format_money(payment.amount_cents), "reason": reason},
     )
+    _flag_own_home(actor, payment.home, f"voided a {format_money(payment.amount_cents)} payment")
     return payment
 
 
@@ -193,6 +229,7 @@ def add_adjustment(home, amount_cents, memo, entry_date, actor=None, request=Non
         home,
         {"amount": format_money(amount_cents, signed=True), "memo": memo},
     )
+    _flag_own_home(actor, home, f"a {format_money(amount_cents, signed=True)} adjustment ({memo})")
     return entry
 
 
@@ -220,21 +257,43 @@ def waive_late_fee(invoice, actor=None, request=None, reason=""):
         invoice,
         {"amount": format_money(fee.amount_cents), "reason": reason},
     )
+    _flag_own_home(actor, invoice.home, f"waived a {format_money(fee.amount_cents)} late fee")
     return entry
 
 
+class PeriodOverlapError(ValueError):
+    pass
+
+
 def ensure_period(spec, settings):
-    period, _ = BillingPeriod.objects.get_or_create(
+    """Get or create the period starting at spec.start, snapshotting the current terms.
+
+    Refuses to create a period that overlaps an existing one (e.g. after switching from
+    annual to quarterly mid-year), which would bill the same months twice.
+    """
+    existing = BillingPeriod.objects.filter(start=spec.start).first()
+    if existing:
+        return existing
+    candidate = BillingPeriod(
         start=spec.start,
-        defaults={
-            "end": spec.end,
-            "due_date": spec.due_date,
-            "label": periods.period_label(spec, settings.frequency),
-            "amount_cents": settings.amount_cents,
-            "grace_days": settings.grace_days,
-        },
+        end=spec.end,
+        due_date=spec.due_date,
+        label=periods.period_label(spec, settings.frequency),
+        amount_cents=settings.amount_cents,
+        grace_days=settings.grace_days,
+        late_fee_type=settings.late_fee_type,
+        late_fee_flat_cents=settings.late_fee_flat_cents,
+        late_fee_percent=settings.late_fee_percent,
     )
-    return period
+    clash = candidate.overlaps().first()
+    if clash:
+        raise PeriodOverlapError(f"{candidate.label} would overlap {clash.label}.")
+    try:
+        with transaction.atomic():
+            candidate.save()
+    except IntegrityError:
+        return BillingPeriod.objects.get(start=spec.start)
+    return candidate
 
 
 def create_invoice(home, period, issued_on, actor=None):
@@ -271,7 +330,7 @@ def bill_homes(period, homes, issued_on=None, actor=None, request=None):
 
 
 def generate_invoices(today):
-    """Create periods and invoices whose issue date has arrived. Idempotent."""
+    """Create the current period's invoices once their issue date arrives. Idempotent."""
     settings = DuesSettings.load()
     if not settings.auto_invoicing or settings.amount_cents <= 0:
         return {"invoices_created": 0}
@@ -283,10 +342,16 @@ def generate_invoices(today):
         lead_days=settings.invoice_lead_days,
         billing_start=settings.billing_start_date,
     )
-    created = []
+    created, skipped = [], []
     for spec in specs:
-        period = ensure_period(spec, settings)
         issued_on = spec.issue_date(settings.invoice_lead_days)
+        if (today - issued_on).days > AUTO_BILL_WINDOW_DAYS:
+            continue  # too old to bill automatically
+        try:
+            period = ensure_period(spec, settings)
+        except PeriodOverlapError as exc:
+            skipped.append(str(exc))
+            continue
         # Homes added after a period's invoices went out aren't billed retroactively;
         # the board can bill them by hand from the period page.
         homes = Home.objects.filter(is_active=True, created_at__date__lte=max(issued_on, today))
@@ -299,42 +364,48 @@ def generate_invoices(today):
     if settings.email_new_invoices:
         for invoice in created:
             _send_reminder(invoice, ReminderLog.Kind.ISSUED, 0, today)
-    return {"invoices_created": len(created)}
+    result = {"invoices_created": len(created)}
+    if skipped:
+        result["skipped_overlapping_periods"] = skipped
+    return result
 
 
-def late_fee_amount(settings, unpaid_cents):
-    if settings.late_fee_type == DuesSettings.LateFeeType.FLAT:
-        return settings.late_fee_flat_cents
-    if settings.late_fee_type == DuesSettings.LateFeeType.PERCENT:
-        return percent_of(unpaid_cents, settings.late_fee_percent)
+def late_fee_amount(period, unpaid_cents):
+    if period.late_fee_type == DuesSettings.LateFeeType.FLAT:
+        return period.late_fee_flat_cents
+    if period.late_fee_type == DuesSettings.LateFeeType.PERCENT:
+        return percent_of(unpaid_cents, period.late_fee_percent)
     return 0
 
 
 def apply_late_fees(today):
-    """Charge one late fee per invoice still unpaid at the end of its grace period."""
-    settings = DuesSettings.load()
-    if settings.late_fee_type == DuesSettings.LateFeeType.NONE:
-        return {"late_fees_applied": 0}
+    """Charge one late fee per invoice still unpaid at the end of its grace period.
+
+    Uses the late-fee terms snapshotted on the invoice's period.
+    """
     applied = 0
-    candidates = (
-        Invoice.objects.select_related("period", "home")
+    window_start = today - timedelta(days=LATE_FEE_WINDOW_DAYS + 120)  # coarse DB filter
+    candidates = [
+        invoice
+        for invoice in Invoice.objects.select_related("period", "home")
+        .filter(home__is_active=True, period__due_date__lt=today, period__due_date__gte=window_start)
+        .exclude(period__late_fee_type=DuesSettings.LateFeeType.NONE)
         .exclude(entries__kind=K.LATE_FEE)
-        .filter(period__due_date__lt=today)
-    )
+        if 0 < (today - invoice.period.late_after).days <= LATE_FEE_WINDOW_DAYS
+        # Never auto-charge an invoice the household got after its due date
+        # (e.g. billed by hand late).
+        and timezone.localtime(invoice.created_at).date() <= invoice.period.due_date
+    ]
+    # Voided payments (bounced checks) never count toward paying on time.
+    lines = lines_for_homes({i.home_id for i in candidates}, drop_voided=True)
     for invoice in candidates:
         deadline = invoice.period.late_after
-        if today <= deadline:
-            continue
-        # Never auto-charge a late fee on an invoice the household got after its due date
-        # (e.g. billed by hand late, or caught up after a scheduler outage).
-        if timezone.localtime(invoice.created_at).date() > invoice.period.due_date:
-            continue
         # Judge lateness as of the deadline, so a late scheduler run doesn't forgive or
         # penalize anyone: payments dated after the deadline were late.
-        unpaid = ledger.invoice_unpaid(_lines(invoice.home), invoice.id, as_of=deadline)
+        unpaid = ledger.invoice_unpaid(lines[invoice.home_id], invoice.id, as_of=deadline)
         if unpaid <= 0:
             continue
-        fee = late_fee_amount(settings, unpaid)
+        fee = late_fee_amount(invoice.period, unpaid)
         if fee <= 0:
             continue
         try:
@@ -386,17 +457,36 @@ def _send_reminder(invoice, kind, sequence, today):
 
 def send_reminders(today):
     settings = DuesSettings.load()
-    sent = {"upcoming": 0, "overdue": 0}
-    open_invoices = Invoice.objects.select_related("period", "home").filter(
-        home__is_active=True, period__due_date__gte=today - timedelta(days=730)
+    sent = {"issued": 0, "upcoming": 0, "overdue": 0}
+    invoices = list(
+        Invoice.objects.select_related("period", "home").filter(
+            home__is_active=True, period__due_date__gte=today - timedelta(days=400)
+        )
     )
-    for invoice in open_invoices:
-        status = invoice_status(invoice, today)
+    lines = lines_for_homes({i.home_id for i in invoices})
+    logs = {}
+    for kind, invoice_id, seq in ReminderLog.objects.filter(invoice__in=invoices).values_list(
+        "kind", "invoice_id", "sequence"
+    ):
+        logs.setdefault((kind, invoice_id), set()).add(seq)
+    for invoice in invoices:
+        status = invoice_status(invoice, today, lines[invoice.home_id])
         if status.state == "paid":
             continue
         period = invoice.period
-        if settings.reminder_days_before and (
-            period.due_date - timedelta(days=settings.reminder_days_before) <= today < period.due_date
+        # Retry "new invoice" emails that failed or had no recipient yet.
+        if (
+            settings.email_new_invoices
+            and ("issued", invoice.pk) not in logs
+            and 0 <= (today - invoice.issued_on).days <= ISSUED_EMAIL_WINDOW_DAYS
+            and today < period.due_date
+        ):
+            if _send_reminder(invoice, ReminderLog.Kind.ISSUED, 0, today):
+                sent["issued"] += 1
+        if (
+            settings.reminder_days_before
+            and ("upcoming", invoice.pk) not in logs
+            and period.due_date - timedelta(days=settings.reminder_days_before) <= today < period.due_date
         ):
             if _send_reminder(invoice, ReminderLog.Kind.UPCOMING, 0, today):
                 sent["upcoming"] += 1
@@ -407,9 +497,7 @@ def send_reminders(today):
         ):
             days_late = (today - period.late_after).days - 1
             seq = min(days_late // settings.overdue_reminder_every_days, settings.overdue_reminder_max - 1)
-            if not ReminderLog.objects.filter(
-                invoice=invoice, kind=ReminderLog.Kind.OVERDUE, sequence__gte=seq
-            ).exists():
+            if not any(s >= seq for s in logs.get(("overdue", invoice.pk), ())):
                 if _send_reminder(invoice, ReminderLog.Kind.OVERDUE, seq, today):
                     sent["overdue"] += 1
     return sent

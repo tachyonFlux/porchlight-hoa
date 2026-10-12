@@ -63,6 +63,10 @@ def can_edit_detail(user, detail):
 # ---------------------------------------------------------------- residents
 
 
+class InviteAlreadyUsedError(Exception):
+    """The invite code was used (and rotated) by a simultaneous claim."""
+
+
 class InactiveUserError(Exception):
     """The email belongs to a deactivated account; the board must reactivate it first."""
 
@@ -127,6 +131,11 @@ def end_residency(residency):
 def complete_claim(claim):
     """Apply a confirmed claim token. Returns (user, created_residency)."""
     invite = claim.invite
+    if invite.pk:
+        # Lock the invite so two simultaneous claims can't both use a single-use code.
+        locked = type(invite).objects.select_for_update().get(pk=invite.pk)
+        if locked.revoked_at is not None:
+            raise InviteAlreadyUsedError(invite.code)
     user, created = attach_resident(
         invite.home,
         claim.email,

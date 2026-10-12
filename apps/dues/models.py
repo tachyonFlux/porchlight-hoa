@@ -111,6 +111,10 @@ class BillingPeriod(models.Model):
     label = models.CharField(max_length=80)
     amount_cents = models.BigIntegerField(help_text="Dues per home for this period.")
     grace_days = models.PositiveSmallIntegerField(default=30)
+    # Late-fee terms are snapshotted too, so invoices are charged what they said.
+    late_fee_type = models.CharField(max_length=10, choices=DuesSettings.LateFeeType.choices, default="none")
+    late_fee_flat_cents = models.BigIntegerField(default=0)
+    late_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0"))
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -123,6 +127,12 @@ class BillingPeriod(models.Model):
     def late_after(self):
         """Last day a payment counts as on time."""
         return self.due_date + timedelta(days=self.grace_days)
+
+    def overlaps(self):
+        return BillingPeriod.objects.filter(start__lte=self.end, end__gte=self.start).exclude(pk=self.pk)
+
+
+PUBLIC_LINK_DAYS = 90
 
 
 def _invoice_token():
@@ -153,6 +163,11 @@ class Invoice(models.Model):
 
     def get_public_url(self):
         return reverse("dues:invoice_public", args=[self.public_token])
+
+    @property
+    def public_link_expires(self):
+        """The QR/email link stops working 90 days after the period ends."""
+        return self.period.end + timedelta(days=PUBLIC_LINK_DAYS)
 
 
 class PaymentMethod(models.TextChoices):
