@@ -46,6 +46,15 @@ def can_see(user, audience):
     return audience == Audience.RESIDENTS and Residency.objects.current().filter(user=user).exists()
 
 
+def feed_meetings(feed):
+    """What a calendar subscription shows. Board-only meetings need an explicit opt-in."""
+    user = feed.user
+    qs = visible_meetings(user)
+    if user.is_board and not feed.include_board:
+        qs = qs.filter(audience=Audience.RESIDENTS)
+    return qs
+
+
 def visible_meetings(user):
     qs = Meeting.objects.all()
     if user.is_board:
@@ -118,10 +127,15 @@ def record_votes(poll, user, choices):
 
 @transaction.atomic
 def close_poll(poll, option, meeting_fields, actor=None, request=None):
-    """Close the poll on `option` and create the meeting. Idempotent per poll."""
+    """Close the poll on `option` and create the meeting. Returns (meeting, created).
+
+    Idempotent per poll: a second (e.g. double-clicked) close returns the existing meeting
+    with created=False, so callers don't email everyone twice.
+    """
     poll = Poll.objects.select_for_update().get(pk=poll.pk)
-    if poll.status == Poll.Status.CLOSED and hasattr(poll, "meeting"):
-        return poll.meeting
+    existing = Meeting.objects.filter(poll=poll).first()
+    if existing:
+        return existing, False
     if option.poll_id != poll.pk:
         raise ValueError("That time isn't part of this poll.")
     poll.status = Poll.Status.CLOSED
@@ -137,7 +151,7 @@ def close_poll(poll, option, meeting_fields, actor=None, request=None):
         **{"title": poll.title, "location": poll.location, **meeting_fields},
     )
     audit.record(request or actor, "meetings.poll_closed", poll, {"meeting": meeting.pk, "time": str(option)})
-    return meeting
+    return meeting, True
 
 
 # ------------------------------------------------------------------ calendar

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from django import forms
 from django.utils import timezone
@@ -9,6 +9,17 @@ from .models import Meeting, Poll, PollVote
 
 DATETIME_WIDGET = forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M")
 MAX_OPTIONS = 8
+
+
+def _aware(day, time):
+    """Make a local wall-clock time aware, rejecting times skipped by a DST change."""
+    naive = datetime.combine(day, time)
+    aware = timezone.make_aware(naive)
+    # A time in the spring-forward gap (e.g. 2:30 AM) doesn't survive a round trip.
+    round_trip = aware.astimezone(UTC).astimezone(timezone.get_current_timezone())
+    if round_trip.replace(tzinfo=None) != naive:
+        raise ValueError("nonexistent local time")
+    return aware
 
 
 class PollForm(forms.ModelForm):
@@ -51,10 +62,15 @@ class PollForm(forms.ModelForm):
             if not all((day, start, end)):
                 self.add_error(f"date_{i}", "Fill in the date, start and end time (or leave the row empty).")
                 continue
-            starts = timezone.make_aware(datetime.combine(day, start))
-            ends = timezone.make_aware(datetime.combine(day, end))
-            if ends <= starts:
-                ends += timedelta(days=1)  # e.g. 11 PM – 12:30 AM
+            if start == end:
+                self.add_error(f"end_{i}", "The end time has to be different from the start time.")
+                continue
+            try:
+                starts = _aware(day, start)
+                ends = _aware(day + timedelta(days=1) if end < start else day, end)  # 11 PM – 12:30 AM
+            except ValueError:
+                self.add_error(f"start_{i}", "That time doesn't exist on that day (clocks change).")
+                continue
             options.append((starts, ends))
         if len(set(options)) != len(options):
             raise forms.ValidationError("Two of the times are the same.")

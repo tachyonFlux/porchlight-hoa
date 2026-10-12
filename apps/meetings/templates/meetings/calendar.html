@@ -10,5 +10,16 @@
   <input type="text" readonly value="{{ https_url }}" onclick="this.select()">
   <p class="muted" style="margin-top:1rem"><small>This link is private to you. Anyone with it can see the meetings you can see. If you shared it by accident, make a new one:</small></p>
   <form method="post">{% csrf_token %}<button class="small" type="submit">Make a new link</button></form>
+  {% if is_board %}
+  <hr style="border:0;border-top:1px solid var(--border);margin:1.25rem 0">
+  <h2>Board-only meetings</h2>
+  {% if feed.include_board %}
+    <p>Your link <strong>includes</strong> board-only meetings. Don't share it outside the board.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="include_board" value="0"><button class="small" type="submit">Leave board meetings out</button></form>
+  {% else %}
+    <p class="muted"><small>Board-only meetings aren't in your calendar link, in case it's on a shared family calendar. Including them makes a new link.</small></p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="include_board" value="1"><button class="small" type="submit">Include board-only meetings</button></form>
+  {% endif %}
+  {% endif %}
 </div>
 {% endblock %}

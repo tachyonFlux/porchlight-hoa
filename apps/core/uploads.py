@@ -7,7 +7,9 @@ permissions and then call `serve_private`.
 import mimetypes
 import os
 import uuid
+import zipfile
 
+from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404
@@ -27,8 +29,20 @@ ALLOWED = {
     "txt": ("text/plain", ()),
     "md": ("text/markdown", ()),
 }
+HEIC_BRANDS = {b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1", b"msf1"}
 DOCUMENT_TYPES = ("pdf", "docx", "xlsx", "txt", "md", "png", "jpg", "jpeg")
 IMAGE_TYPES = ("png", "jpg", "jpeg", "gif", "webp", "heic")
+
+
+def _is_office_zip(f):
+    """Word/Excel files are ZIPs that contain [Content_Types].xml."""
+    try:
+        with zipfile.ZipFile(f) as archive:
+            return "[Content_Types].xml" in archive.namelist()
+    except zipfile.BadZipFile:
+        return False
+    finally:
+        f.seek(0)
 
 
 def validate_upload(f, allowed=DOCUMENT_TYPES, max_mb=None):
@@ -44,7 +58,11 @@ def validate_upload(f, allowed=DOCUMENT_TYPES, max_mb=None):
     _, magics = ALLOWED[ext]
     if magics and not any(head.startswith(m) for m in magics):
         raise ValidationError("That file's contents don't match its type.")
-    if ext == "heic" and head[4:8] != b"ftyp":
+    if ext == "webp" and head[8:12] != b"WEBP":
+        raise ValidationError("That file's contents don't match its type.")
+    if ext == "heic" and (head[4:8] != b"ftyp" or head[8:12] not in HEIC_BRANDS):
+        raise ValidationError("That file's contents don't match its type.")
+    if ext in ("docx", "xlsx") and not _is_office_zip(f):
         raise ValidationError("That file's contents don't match its type.")
     if ext in ("txt", "md") and b"\x00" in head:
         raise ValidationError("That doesn't look like a text file.")
@@ -83,3 +101,28 @@ def serve_private(field_file, download_name=None, inline=True):
     response["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
     response["Cache-Control"] = "private, no-store"
     return response
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleImageField(forms.FileField):
+    """Accepts several images in one input; validates each like validate_upload."""
+
+    def __init__(self, *args, max_files=10, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput(attrs={"accept": "image/*", "multiple": True}))
+        kwargs.setdefault("required", False)
+        self.max_files = max_files
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        files = data if isinstance(data, (list, tuple)) else ([data] if data else [])
+        if self.required and not files:
+            raise ValidationError(self.error_messages["required"], code="required")
+        if len(files) > self.max_files:
+            raise ValidationError(f"Please add at most {self.max_files} photos.")
+        cleaned = [super(MultipleImageField, self).clean(f, initial) for f in files]
+        for f in cleaned:
+            validate_upload(f, allowed=IMAGE_TYPES)
+        return cleaned

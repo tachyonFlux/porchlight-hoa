@@ -140,10 +140,19 @@ class CalendarFeedToken(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_feed"
     )
     token = models.CharField(max_length=64, unique=True)
+    include_board = models.BooleanField(
+        default=False,
+        help_text="Include board-only meetings. Opt-in, because anyone with the link sees them.",
+    )
     created_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Calendar feed for {self.user}"
+
+    @classmethod
+    def rotate(cls, user):
+        """Invalidate a user's feed link, e.g. when their board role changes."""
+        cls.objects.filter(user=user).delete()
 
     @classmethod
     def for_user(cls, user, regenerate=False):

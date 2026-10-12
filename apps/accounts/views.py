@@ -23,6 +23,7 @@ from apps.core.email import send_templated
 from apps.core.permissions import admin_required, board_required, board_required_enrolling
 from apps.core.ratelimit import hit, rate_limit, too_many
 from apps.core.utils import absolute_url, client_ip
+from apps.meetings.models import CalendarFeedToken
 
 from .forms import BoardPositionForm, EmailForm, OTPForm, PasswordLoginForm, ProfileForm
 from .models import BoardPosition, MagicLinkToken
@@ -268,6 +269,9 @@ def board_add(request):
             position = form.save(commit=False)
             position.user = user
             position.save()
+            # Role changed: retire their calendar link so a link shared as a resident
+            # doesn't start carrying board meetings.
+            CalendarFeedToken.rotate(user)
             audit.record(
                 request,
                 "board.position_added",
@@ -285,6 +289,7 @@ def board_end(request, pk):
     position = get_object_or_404(BoardPosition, pk=pk, ended_on__isnull=True)
     position.ended_on = timezone.localdate()
     position.save(update_fields=["ended_on"])
+    CalendarFeedToken.rotate(position.user)
     audit.record(request, "board.position_ended", position, {"user": position.user.email})
     messages.success(request, f"{position} ended today.")
     return redirect("accounts:board_list")

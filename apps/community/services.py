@@ -25,6 +25,17 @@ def is_household_member(user, home):
     return user.is_authenticated and Residency.objects.current().filter(user=user, home=home).exists()
 
 
+def household_emails(home):
+    """Emails of everyone currently living at `home`."""
+    return sorted(
+        {
+            r.user.email
+            for r in Residency.objects.current().filter(home=home).select_related("user")
+            if r.user.email
+        }
+    )
+
+
 def is_resident(user):
     """Anyone currently attached to a home (or on the board) counts as a neighbor."""
     return user.is_authenticated and (user.is_board or Residency.objects.current().filter(user=user).exists())

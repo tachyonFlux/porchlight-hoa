@@ -9,11 +9,12 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.community.models import Home, Residency
+from apps.community.services import household_emails
 from apps.core import audit
 from apps.core.email import send_bulk, send_templated
 from apps.core.money import format_money, percent_of
@@ -114,33 +115,34 @@ def statuses_for_period(period, today=None):
     return [invoice_status(inv, today, lines_by_home.get(inv.home_id, [])) for inv in invoices]
 
 
-def household_emails(home):
-    return sorted(
-        {
-            r.user.email
-            for r in Residency.objects.current().filter(home=home).select_related("user")
-            if r.user.email
-        }
-    )
-
-
 # ------------------------------------------------------------------ board actions
 
 
 def alert_board(subject_line, message, exclude=None):
-    """Email every board member (except `exclude`) about a sensitive change."""
+    """Email every board member (except `exclude`) once the current transaction commits."""
     from apps.accounts.models import board_members
 
-    emails = board_members().exclude(pk=getattr(exclude, "pk", None)).values_list("email", flat=True)
-    send_bulk(emails, "dues/email/board_alert", {"subject_line": subject_line, "message": message})
+    def send():
+        emails = board_members().exclude(pk=getattr(exclude, "pk", None)).values_list("email", flat=True)
+        send_bulk(emails, "dues/email/board_alert", {"subject_line": subject_line, "message": message})
+
+    transaction.on_commit(send)
+
+
+OWN_HOME_LOOKBACK_DAYS = 90
 
 
 def _flag_own_home(actor, home, what):
     """A board member changing their own household's ledger is allowed, but the rest of the
-    board is told, so nobody can quietly credit their own account."""
+    board is told, so nobody can quietly credit their own account. Recent former residency
+    counts too, so ending your residency first doesn't avoid the alert."""
     if actor is None or not getattr(actor, "is_authenticated", False):
         return
-    if Residency.objects.current().filter(user=actor, home=home).exists():
+    since = timezone.localdate() - timedelta(days=OWN_HOME_LOOKBACK_DAYS)
+    lived_there = Residency.objects.filter(user=actor, home=home).filter(
+        Q(ended_on__isnull=True) | Q(ended_on__gte=since)
+    )
+    if lived_there.exists():
         alert_board(
             f"{actor} changed their own dues ledger",
             f"{actor} ({actor.email}) recorded this on their own home, {home}: {what}. "

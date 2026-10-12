@@ -65,9 +65,10 @@ class TestTally:
 class TestPollToMeeting:
     def test_close_creates_meeting(self, poll, board_user):
         option = list(poll.options.all())[2]
-        meeting = services.close_poll(
+        meeting, created = services.close_poll(
             poll, option, {"kind": "general", "agenda": "1. Budget"}, actor=board_user
         )
+        assert created
         poll.refresh_from_db()
         assert poll.status == "closed" and poll.chosen_option == option
         assert (meeting.starts_at, meeting.ends_at) == (option.starts_at, option.ends_at)
@@ -76,9 +77,10 @@ class TestPollToMeeting:
 
     def test_close_is_idempotent(self, poll, board_user):
         option = poll.options.first()
-        first = services.close_poll(poll, option, {}, actor=board_user)
-        second = services.close_poll(poll, option, {}, actor=board_user)
+        first, created = services.close_poll(poll, option, {}, actor=board_user)
+        second, created_again = services.close_poll(poll, option, {}, actor=board_user)
         assert first.pk == second.pk and Meeting.objects.count() == 1
+        assert created and not created_again
 
     def test_option_from_other_poll_rejected(self, poll, board_user):
         other = Poll.objects.create(title="Other", created_by=board_user)
@@ -222,6 +224,9 @@ class TestCalendar:
             ).walk("VEVENT")
         ]
         assert get(resident_feed) == ["Annual"]
+        assert get(board_feed) == ["Annual"]  # board-only meetings are opt-in
+        board_feed.include_board = True
+        board_feed.save()
         assert sorted(get(board_feed)) == ["Annual", "Exec"]
 
     def test_feed_token_regeneration_and_bad_tokens(self, login, client, resident, meetings):

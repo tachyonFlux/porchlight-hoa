@@ -184,6 +184,13 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "Porchlight <porchlight@localhost
 MAX_UPLOAD_MB = int(env("PORCHLIGHT_MAX_UPLOAD_MB", "15"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+# Whole-request cap (several photos in one form). Enforced before files hit the disk.
+MAX_REQUEST_MB = int(env("PORCHLIGHT_MAX_REQUEST_MB", "100"))
+FILE_UPLOAD_HANDLERS = [
+    "apps.core.upload_handlers.RequestSizeLimitHandler",
+    "django.core.files.uploadhandler.MemoryFileUploadHandler",
+    "django.core.files.uploadhandler.TemporaryFileUploadHandler",
+]
 
 # Magic links / claim links
 MAGIC_LINK_TTL_MINUTES = int(env("PORCHLIGHT_MAGIC_LINK_TTL_MINUTES", "20"))

@@ -128,7 +128,9 @@ class TestBoardPowers:
         assert login(secretary).get(reverse("dues:settings")).status_code == 403
         assert login(board_user).get(reverse("dues:settings")).status_code == 200  # treasurer
 
-    def test_payment_instruction_change_alerts_board(self, login, board_user, admin_user, dues):
+    def test_payment_instruction_change_alerts_board(
+        self, login, board_user, admin_user, dues, django_capture_on_commit_callbacks
+    ):
         data = {
             "amount_cents": "300",
             "frequency": "annual",
@@ -146,13 +148,17 @@ class TestBoardPowers:
             "overdue_reminder_every_days": 30,
             "overdue_reminder_max": 3,
         }
-        login(board_user).post(reverse("dues:settings"), data)
+        with django_capture_on_commit_callbacks(execute=True):
+            login(board_user).post(reverse("dues:settings"), data)
         alert = [m for m in mail.outbox if "payment instructions" in m.subject.lower()]
         assert alert and alert[0].to == [admin_user.email]
 
-    def test_ledger_change_on_own_home_alerts_board(self, board_user, admin_user, home):
+    def test_ledger_change_on_own_home_alerts_board(
+        self, board_user, admin_user, home, django_capture_on_commit_callbacks
+    ):
         Residency.objects.create(home=home, user=board_user)
-        services.add_adjustment(home, -5000, "credit", date(2026, 10, 1), actor=board_user)
+        with django_capture_on_commit_callbacks(execute=True):
+            services.add_adjustment(home, -5000, "credit", date(2026, 10, 1), actor=board_user)
         assert any(admin_user.email in m.to for m in mail.outbox)
 
     def test_board_password_only_blocked_everywhere_when_two_step_required(
