@@ -1,0 +1,1 @@
+Friendly reminder: dues due {{ invoice.period.due_date|date:"M j" }}

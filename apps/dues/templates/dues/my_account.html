@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Dues{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Dues</h1></div>
+{% for a in accounts %}
+<div class="card">
+  <div class="row"><h2 class="grow" style="margin:0">{{ a.home.address }}</h2>
+    <div class="stat" style="text-align:right"><span class="num" style="font-size:1.5rem">{{ a.balance|money }}</span>
+      <span class="label">{% if a.balance > 0 %}due{% elif a.balance < 0 %}credit on account{% else %}all paid up{% endif %}</span></div></div>
+  {% if a.open %}
+  <h3 style="margin-top:1rem">Open invoices</h3>
+  <ul class="list">
+    {% for s in a.open %}<li class="row"><span class="grow"><a href="{{ s.invoice.get_absolute_url }}">{{ s.invoice.period.label }}</a><br><small class="muted">Due {{ s.invoice.period.due_date|date:"M j, Y" }}</small></span>
+      <span class="badge {% if s.state == 'overdue' %}danger{% else %}warn{% endif %}">{{ s.unpaid_cents|money }} {% if s.state == 'overdue' %}overdue{% else %}open{% endif %}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  <details style="margin-top:1rem"><summary>Account history</summary>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+      <tbody>{% for e, bal in a.rows %}<tr><td>{{ e.date|date:"M j, Y" }}</td><td>{{ e.get_kind_display }}{% if e.memo and e.kind != 'payment' %}<br><small class="muted">{{ e.memo }}</small>{% endif %}</td><td class="num">{{ e.amount_cents|money_signed }}</td><td class="num">{{ bal|money }}</td></tr>
+      {% empty %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+</div>
+{% empty %}
+<div class="card empty">Your account isn't linked to a home yet.</div>
+{% endfor %}
+{% if accounts %}
+<div class="card">
+  <h2>How to pay</h2>
+  {% if dues.payable_to %}<p>Make checks payable to <strong>{{ dues.payable_to }}</strong>.</p>{% endif %}
+  {% if hoa.mailing_address %}<p>Mail to:<br>{{ hoa.mailing_address|linebreaksbr }}</p>{% endif %}
+  {% if dues.payment_instructions %}<p>{{ dues.payment_instructions|linebreaksbr }}</p>{% endif %}
+  <p class="muted"><small>Payments show up here once the treasurer records them.</small></p>
+</div>
+{% endif %}
+{% endblock %}

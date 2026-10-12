@@ -1,0 +1,9 @@
+{% load porchlight %}Hello neighbor,
+
+Just a friendly reminder that {{ invoice.period.label }} for {{ invoice.home.address }} ({{ status.unpaid_cents|money }}) is due on {{ invoice.period.due_date|date:"F j, Y" }}.
+
+Invoice: {{ invoice_url }}
+
+If you've already sent your payment, thank you, and please disregard this note. It can take a few days for the treasurer to record it.
+
+{{ hoa.display_name }}

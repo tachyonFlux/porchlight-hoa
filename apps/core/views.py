@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.accounts.models import BoardPosition
 from apps.community.models import Home, Residency
+from apps.dues import services as dues_services
 
 from . import audit, setup_token
 from .forms import HOASettingsForm, SetupForm, SetupNameForm
@@ -76,9 +77,12 @@ def setup(request):
 @login_required
 def dashboard(request):
     user = request.user
-    residencies = (
+    residencies = list(
         Residency.objects.current().filter(user=user).select_related("home").order_by("home__address")
     )
+    balances = dues_services.balances_by_home()
+    for r in residencies:
+        r.balance = balances.get(r.home_id, 0)
     ctx = {"residencies": residencies}
     if user.is_board:
         homes = Home.objects.filter(is_active=True)
@@ -91,6 +95,8 @@ def dashboard(request):
             .count(),
         }
         ctx["last_task_run"] = TaskRun.objects.first()
+        owing = [b for b in balances.values() if b > 0]
+        ctx["dues_stats"] = {"homes_owing": len(owing), "total_owed": sum(owing)}
     return render(request, "core/dashboard.html", ctx)
 
 

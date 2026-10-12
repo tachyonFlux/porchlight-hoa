@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Record payment{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Record a payment</h1></div>
+{% include "dues/_board_tabs.html" with tab="payment" %}
+<div class="grid two">
+  <div class="card">
+    <form method="post">{% csrf_token %}
+      {% include "partials/form.html" %}
+      <button class="primary block" type="submit">Record payment</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Recently recorded</h2>
+    <ul class="list">{% for p in recent %}<li class="row"><a class="grow" href="{% url 'dues:home_ledger' p.home_id %}">{{ p.home.address }}</a><span>{{ p.amount_cents|money }}</span></li>{% empty %}<li class="muted">None yet.</li>{% endfor %}</ul>
+  </div>
+</div>
+{% endblock %}

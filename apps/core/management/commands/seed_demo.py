@@ -144,9 +144,46 @@ class Command(BaseCommand):
                 home=created_homes[0], user=admin, defaults={"is_primary_contact": False}
             )
 
+        self._seed_dues(rng, admin, created_homes)
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Demo neighborhood ready: {len(created_homes)} homes.\n"
                 f"Board sign-in: board@example.com / {DEMO_PASSWORD} (password login)."
             )
         )
+
+    def _seed_dues(self, rng, admin, homes):
+        """This year's annual dues: most homes paid, a few partial or late."""
+        from datetime import date, timedelta
+
+        from django.utils import timezone
+
+        from apps.dues import periods as dues_periods
+        from apps.dues import services as dues
+        from apps.dues.models import DuesSettings
+
+        today = timezone.localdate()
+        settings_ = DuesSettings.load()
+        settings_.amount_cents = 30000
+        settings_.payable_to = "Lantern Hill Community Association"
+        settings_.late_fee_type = DuesSettings.LateFeeType.FLAT
+        settings_.late_fee_flat_cents = 2500
+        settings_.payment_instructions = "Questions about your account? Email board@example.com."
+        settings_.billing_start_date = date(today.year + 1, 1, 1)
+        settings_.save()
+
+        spec = dues_periods.period_containing(today, "annual", 1, 1)
+        period = dues.ensure_period(spec, settings_)
+        issued = spec.issue_date(settings_.invoice_lead_days)
+        for home in homes:
+            dues.create_invoice(home, period, issued)
+            roll = rng.random()
+            paid_on = min(spec.due_date + timedelta(days=rng.randint(-20, 25)), today)
+            if roll < 0.75:
+                dues.record_payment(
+                    home, 30000, "check", paid_on, check_number=str(rng.randint(1000, 9999)), actor=admin
+                )
+            elif roll < 0.85:
+                dues.record_payment(home, 15000, "cash", paid_on, actor=admin)
+        dues.apply_late_fees(today)

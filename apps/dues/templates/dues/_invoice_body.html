@@ -1,0 +1,30 @@
+{% load porchlight %}
+<div class="inv">
+  <div class="inv-head">
+    <div><div class="inv-hoa">{{ hoa.display_name }}</div>{% if hoa.mailing_address %}<div class="inv-small">{{ hoa.mailing_address|linebreaksbr }}</div>{% endif %}</div>
+    <div class="inv-right"><div class="inv-title">Invoice</div><div class="inv-small">No. {{ invoice.number }}<br>Issued {{ invoice.issued_on|date:"M j, Y" }}</div></div>
+  </div>
+  <div class="inv-to"><div class="inv-label">For</div><strong>{{ invoice.home.address }}</strong>{% if invoice.home.lot_number %}<br>Lot {{ invoice.home.lot_number }}{% endif %}</div>
+  <table class="inv-table">
+    <thead><tr><th>Description</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+      <tr><td>{{ invoice.period.label }}<br><span class="inv-small">{{ invoice.period.start|date:"M j, Y" }} – {{ invoice.period.end|date:"M j, Y" }}</span></td><td class="num">{{ invoice.amount_cents|money }}</td></tr>
+      {% if status.late_fee_cents %}<tr><td>Late fee</td><td class="num">{{ status.late_fee_cents|money }}</td></tr>{% endif %}
+      {% if status.paid_cents %}<tr><td>Payments received</td><td class="num">−{{ status.paid_cents|money }}</td></tr>{% endif %}
+    </tbody>
+    <tfoot><tr><th>Amount due by {{ invoice.period.due_date|date:"M j, Y" }}</th><th class="num">{{ status.unpaid_cents|money }}</th></tr></tfoot>
+  </table>
+  {% if balance != status.unpaid_cents %}<p class="inv-small">Total account balance for this home: {{ balance|money }}</p>{% endif %}
+  <div class="inv-pay">
+    <div>
+      <div class="inv-label">How to pay</div>
+      {% if dues.payable_to %}<p>Make checks payable to <strong>{{ dues.payable_to }}</strong>.</p>{% endif %}
+      {% if hoa.mailing_address %}<p>Mail to: {{ hoa.mailing_address|linebreaksbr }}</p>{% endif %}
+      <p>Please write <strong>{{ invoice.home.address }}</strong> on the memo line.</p>
+      {% if dues.payment_instructions %}<p>{{ dues.payment_instructions|linebreaksbr }}</p>{% endif %}
+      {% if dues.late_fee_type != 'none' %}<p class="inv-small">Payments received after {{ invoice.period.late_after|date:"M j, Y" }} may include a late fee.</p>{% endif %}
+    </div>
+    <div class="inv-qr">{{ qr_svg|safe }}<div class="inv-small">Scan to view online</div></div>
+  </div>
+  <p class="inv-small inv-thanks">Thank you for helping keep our neighborhood a great place to live!</p>
+</div>

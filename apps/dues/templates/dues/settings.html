@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Dues settings{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Dues settings</h1></div>
+{% include "dues/_board_tabs.html" with tab="settings" %}
+<div class="grid sidebar">
+  <div class="card">
+    <form method="post">{% csrf_token %}
+      {% include "partials/form.html" %}
+      <button class="primary" type="submit">Save</button>
+    </form>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Upcoming schedule</h2>
+      {% if preview %}
+      <ul class="list">{% for p in preview %}<li><strong>{{ p.label }}</strong><br><small class="muted">Invoices go out {{ p.issue|date:"M j, Y" }} · due {{ p.due|date:"M j, Y" }} · late after {{ p.late_after|date:"M j, Y" }}</small></li>{% endfor %}</ul>
+      {% else %}<p class="muted">Set a billing start date to see the schedule.</p>{% endif %}
+    </div>
+    <div class="card"><p class="muted"><small>Changes apply to billing periods created after you save. Existing invoices keep their amounts.</small></p></div>
+  </div>
+</div>
+{% endblock %}

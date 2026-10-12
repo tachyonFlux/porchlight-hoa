@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}{{ period.label }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ period.label }}</h1></div>
+{% include "dues/_board_tabs.html" with tab="periods" %}
+<div class="grid sidebar">
+  <div class="card">
+    <p>{{ period.start|date:"M j, Y" }} – {{ period.end|date:"M j, Y" }} · {{ period.amount_cents|money }} per home · due {{ period.due_date|date:"M j, Y" }} · late after {{ period.late_after|date:"M j, Y" }}</p>
+    <p>{{ invoice_count }} invoice{{ invoice_count|pluralize }} created. <a href="{% url 'dues:overview' %}?period={{ period.pk }}">See who has paid</a></p>
+    <h2>Print invoices</h2>
+    <div class="actions">
+      <a class="btn" target="_blank" href="{% url 'dues:period_print' period.pk %}">All (HTML)</a>
+      <a class="btn" href="{% url 'dues:period_print' period.pk %}?format=pdf">All (PDF)</a>
+      <a class="btn" href="{% url 'dues:period_print' period.pk %}?format=pdf&amp;unpaid=1">Unpaid only (PDF)</a>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Bill homes</h2>
+    {% if form.fields.homes.queryset %}
+    <p class="muted"><small>These active homes have no invoice for this period yet.</small></p>
+    <form method="post">{% csrf_token %}
+      <p><button type="button" class="small" onclick="document.querySelectorAll('input[name=homes]').forEach(c=>c.checked=true)">Select all</button></p>
+      {% include "partials/form.html" %}
+      <button class="primary" type="submit">Create invoices</button>
+    </form>
+    {% else %}<p class="muted">Every active home has an invoice for this period.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

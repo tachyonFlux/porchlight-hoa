@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Ledger: {{ home.address }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ home.address }}</h1>
+  <a class="btn small" href="{{ home.get_absolute_url }}">Home page</a></div>
+{% include "dues/_board_tabs.html" %}
+<div class="grid sidebar">
+  <div>
+    <div class="card">
+      <div class="row"><h2 class="grow" style="margin:0">Ledger</h2><div class="stat" style="text-align:right"><span class="num" style="font-size:1.4rem">{{ balance|money }}</span><span class="label">{% if balance < 0 %}credit{% else %}balance{% endif %}</span></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Entry</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+        <tbody>{% for e, bal in rows %}<tr><td style="white-space:nowrap">{{ e.date|date:"M j, Y" }}</td><td>{{ e.get_kind_display }}<br><small class="muted">{{ e.memo }}</small></td><td class="num">{{ e.amount_cents|money_signed }}</td><td class="num">{{ bal|money }}</td></tr>
+        {% empty %}<tr><td colspan="4" class="empty">No entries yet.</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Invoices</h2>
+      <ul class="list">{% for s in invoices %}
+        <li class="row"><span class="grow"><a href="{{ s.invoice.get_absolute_url }}">{{ s.invoice.period.label }}</a><br><small class="muted">{{ s.invoice.amount_cents|money }}{% if s.late_fee_cents %} + {{ s.late_fee_cents|money }} late fee{% endif %} · due {{ s.invoice.period.due_date|date:"M j, Y" }}</small></span>
+          <span class="badge {% if s.state == 'paid' %}ok{% elif s.state == 'overdue' %}danger{% else %}warn{% endif %}">{% if s.state == 'paid' %}Paid{% else %}{{ s.unpaid_cents|money }} {{ s.state }}{% endif %}</span>
+          {% if s.late_fee_cents %}<a class="btn small" href="{% url 'dues:waive_late_fee' s.invoice.pk %}">Waive fee</a>{% endif %}</li>
+      {% empty %}<li class="muted">No invoices.</li>{% endfor %}</ul>
+    </div>
+    <div class="card">
+      <h2>Payments</h2>
+      <ul class="list">{% for p in payments %}
+        <li class="row"><span class="grow" {% if p.voided_at %}style="text-decoration:line-through"{% endif %}>{{ p.amount_cents|money }} · {{ p.get_method_display }}{% if p.check_number %} #{{ p.check_number }}{% endif %}<br><small class="muted">{{ p.received_on|date:"M j, Y" }}{% if p.note %} · {{ p.note }}{% endif %}</small></span>
+          {% if p.voided_at %}<span class="badge">Voided: {{ p.void_reason }}</span>{% else %}<a class="btn small" href="{% url 'dues:payment_void' p.pk %}">Void</a>{% endif %}</li>
+      {% empty %}<li class="muted">No payments.</li>{% endfor %}</ul>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Record a payment</h2>
+      <form method="post" action="{% url 'dues:payment_new' %}">{% csrf_token %}
+        <input type="hidden" name="next" value="ledger">
+        {% include "partials/form.html" with form=payment_form %}
+        <button class="primary block" type="submit">Record payment</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Credit or charge</h2>
+      <p class="muted"><small>For opening balances, refunds, or corrections.</small></p>
+      <form method="post" action="{% url 'dues:adjustment' home.pk %}">{% csrf_token %}
+        {% include "partials/form.html" with form=adjustment_form %}
+        <button class="block" type="submit">Add to ledger</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

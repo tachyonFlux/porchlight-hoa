@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Invoices</title>
+{% include "dues/_invoice_styles.html" %}
+<style>body { margin: 0; background: #fff; } @media screen { body { padding: 1rem; } .inv-page { border-bottom: 1px dashed #ccc; padding: 1.5rem 0; } }</style>
+</head><body>
+{% for page in pages %}<section class="inv-page">{% include "dues/_invoice_body.html" with invoice=page.invoice status=page.status balance=page.balance dues=page.dues hoa=page.hoa qr_svg=page.qr_svg %}</section>
+{% empty %}<p>No invoices to print.</p>{% endfor %}
+</body></html>

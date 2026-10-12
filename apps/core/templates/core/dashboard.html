@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load porchlight %}
 {% block title %}Home{% endblock %}
 {% block content %}
 <div class="page-head"><h1>Hi, {{ user.get_short_name }}</h1></div>
@@ -10,6 +11,10 @@
       <h2 style="margin-top:0">{{ r.home.address }}</h2>
       <p class="muted">{{ r.get_relation_display }}{% if r.home.lot_number %} · Lot {{ r.home.lot_number }}{% endif %}</p>
       <span class="btn small">View your home</span>
+    </a>
+    <a class="card" href="{% url 'dues:my_account' %}" style="text-decoration:none;color:inherit">
+      <h2 style="margin-top:0">Dues</h2>
+      <p class="stat"><span class="num">{{ r.balance|money }}</span><span class="label">{% if r.balance > 0 %}due{% elif r.balance < 0 %}credit{% else %}all paid up, thank you!{% endif %}</span></p>
     </a>
   {% endfor %}
   </div>
@@ -24,6 +29,7 @@
 {% if is_board %}
   <h2>Board overview</h2>
   <div class="grid three">
+    <a class="card stat" href="{% url 'dues:overview' %}" style="text-decoration:none;color:inherit"><span class="num">{{ dues_stats.total_owed|money }}</span><span class="label">owed by {{ dues_stats.homes_owing }} home{{ dues_stats.homes_owing|pluralize }}</span></a>
     <a class="card stat" href="{% url 'community:board_homes' %}" style="text-decoration:none;color:inherit"><span class="num">{{ board_stats.homes }}</span><span class="label">Homes</span></a>
     <a class="card stat" href="{% url 'community:people' %}" style="text-decoration:none;color:inherit"><span class="num">{{ board_stats.residents }}</span><span class="label">Residents signed up</span></a>
     <a class="card stat" href="{% url 'community:board_homes' %}?show=unclaimed" style="text-decoration:none;color:inherit"><span class="num">{{ board_stats.unclaimed }}</span><span class="label">Homes not yet claimed</span></a>

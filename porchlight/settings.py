@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.community",
+    "apps.dues",
 ]
 
 MIDDLEWARE = [
@@ -205,5 +206,9 @@ LOGGING = {
     "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": env("PORCHLIGHT_LOG_LEVEL", "INFO")},
-    "loggers": {"django.db.backends": {"level": "WARNING"}},
+    "loggers": {
+        "django.db.backends": {"level": "WARNING"},
+        "weasyprint": {"level": "WARNING"},
+        "fontTools": {"level": "WARNING"},
+    },
 }

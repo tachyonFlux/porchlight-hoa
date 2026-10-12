@@ -5,7 +5,7 @@
   <h1>{{ home.address }}</h1>
   {% if home.lot_number %}<span class="badge">Lot {{ home.lot_number }}</span>{% endif %}
   {% if not home.is_active %}<span class="badge warn">Inactive</span>{% endif %}
-  {% if is_board %}<a class="btn small" href="{% url 'community:home_edit' home.pk %}">Edit home</a>{% endif %}
+  {% if is_board %}<a class="btn small" href="{% url 'dues:home_ledger' home.pk %}">Dues ledger</a><a class="btn small" href="{% url 'community:home_edit' home.pk %}">Edit home</a>{% endif %}
 </div>
 
 <div class="grid sidebar">

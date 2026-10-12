@@ -1,0 +1,6 @@
+<div class="actions no-print" style="margin-bottom:1rem">
+  <a class="btn small {% if tab == 'overview' %}primary{% endif %}" href="{% url 'dues:overview' %}">Report</a>
+  <a class="btn small {% if tab == 'payment' %}primary{% endif %}" href="{% url 'dues:payment_new' %}">Record payment</a>
+  <a class="btn small {% if tab == 'periods' %}primary{% endif %}" href="{% url 'dues:period_list' %}">Billing periods</a>
+  <a class="btn small {% if tab == 'settings' %}primary{% endif %}" href="{% url 'dues:settings' %}">Dues settings</a>
+</div>

@@ -1,0 +1,10 @@
+{% load porchlight %}Hello neighbor,
+
+Our records show {{ status.unpaid_cents|money }} still open for {{ invoice.period.label }} at {{ invoice.home.address }}{% if status.late_fee_cents %}, including a {{ status.late_fee_cents|money }} late fee{% endif %}.
+
+Invoice: {{ invoice_url }}
+Your account: {{ account_url }}
+
+If you've already paid, thank you, and sorry for the mix-up. Just reply and we'll sort it out. If now is a hard time, please reach out to the board; we're happy to talk.
+
+{{ hoa.display_name }}

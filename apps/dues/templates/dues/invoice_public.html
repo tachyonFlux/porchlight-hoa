@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Invoice{% endblock %}
+{% block head %}{% include "dues/_invoice_styles.html" %}{% endblock %}
+{% block content %}
+<div class="page-head no-print">
+  <h1>{{ invoice.period.label }}</h1>
+  <span class="badge {% if status.state == 'paid' %}ok{% elif status.state == 'overdue' %}danger{% else %}warn{% endif %}">{% if status.state == 'paid' %}Paid, thank you!{% else %}{{ status.state|capfirst }}{% endif %}</span>
+</div>
+<div class="card">{% include "dues/_invoice_body.html" %}</div>
+{% if can_sign_in %}<p class="muted no-print" style="text-align:center">Live here? <a href="{% url 'accounts:login' %}?next={% url 'dues:my_account' %}">Sign in</a> to see your full account.</p>{% endif %}
+{% endblock %}

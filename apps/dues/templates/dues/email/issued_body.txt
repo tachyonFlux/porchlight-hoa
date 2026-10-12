@@ -1,0 +1,15 @@
+{% load porchlight %}Hello neighbor,
+
+Your {{ invoice.period.label }} invoice for {{ invoice.home.address }} is ready.
+
+Amount: {{ invoice.amount_cents|money }}
+Due: {{ invoice.period.due_date|date:"F j, Y" }}
+
+View or print it here: {{ invoice_url }}
+{% if dues.payable_to %}
+Make checks payable to {{ dues.payable_to }}.{% endif %}{% if hoa.mailing_address %}
+Mail to:
+{{ hoa.mailing_address }}{% endif %}
+
+Thank you!
+{{ hoa.display_name }}

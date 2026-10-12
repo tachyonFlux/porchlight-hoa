@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ title }}</h1>
+  <p><strong>{{ object }}</strong></p>
+  <p class="muted">{{ explain }}</p>
+  <form method="post">{% csrf_token %}
+    {% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">{{ button }}</button><a class="btn" href="{% url 'dues:home_ledger' back %}">Cancel</a></div>
+  </form>
+</div>
+{% endblock %}

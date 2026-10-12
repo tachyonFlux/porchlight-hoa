@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Billing periods{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Billing periods</h1></div>
+{% include "dues/_board_tabs.html" with tab="periods" %}
+<div class="grid sidebar">
+  <div class="card">
+    <ul class="list">{% for p in periods %}<li class="row"><a class="grow" href="{% url 'dues:period_detail' p.pk %}">{{ p.label }}</a><small class="muted">due {{ p.due_date|date:"M j, Y" }} · {{ p.amount_cents|money }}</small></li>{% empty %}<li class="muted">No periods yet.</li>{% endfor %}</ul>
+  </div>
+  <div class="card">
+    <h2>Add a period by hand</h2>
+    <p class="muted"><small>Uses the dues settings for the amount and dates. Useful when you start mid-year, or if you don't use automatic invoices.</small></p>
+    <form method="post">{% csrf_token %}{% include "partials/form.html" %}<button class="primary" type="submit">Create period</button></form>
+  </div>
+</div>
+{% endblock %}

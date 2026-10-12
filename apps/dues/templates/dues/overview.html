@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Dues report{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Dues</h1></div>
+{% include "dues/_board_tabs.html" with tab="overview" %}
+
+{% if not period %}
+<div class="card">
+  <h2>No billing periods yet</h2>
+  <p>Set your dues amount and schedule first. Then turn on automatic invoices, or create a period by hand.</p>
+  <div class="actions"><a class="btn primary" href="{% url 'dues:settings' %}">Dues settings</a><a class="btn" href="{% url 'dues:period_list' %}">Billing periods</a></div>
+</div>
+{% else %}
+<form method="get" class="search-form">
+  <select name="period">{% for p in periods %}<option value="{{ p.pk }}" {% if p.pk == period.pk %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</select>
+  <select name="state" style="width:auto"><option value="">All</option>
+    <option value="paid" {% if state == 'paid' %}selected{% endif %}>Paid</option>
+    <option value="open" {% if state == 'open' %}selected{% endif %}>Open</option>
+    <option value="overdue" {% if state == 'overdue' %}selected{% endif %}>Overdue</option></select>
+  <button type="submit">Show</button>
+</form>
+<div class="grid three">
+  <div class="card stat"><span class="num">{{ totals.collected|money }}</span><span class="label">collected of {{ totals.billed|money }}</span></div>
+  <div class="card stat"><span class="num">{{ totals.paid }}</span><span class="label">homes paid</span></div>
+  <div class="card stat"><span class="num">{{ totals.open|add:totals.overdue }}</span><span class="label">outstanding ({{ totals.overdue }} overdue)</span></div>
+</div>
+<div class="card table-wrap" style="margin-top:1rem">
+  <div class="row no-print" style="margin-bottom:.5rem"><h2 class="grow" style="margin:0">{{ period.label }}</h2>
+    <a class="btn small" href="{% url 'dues:report_csv' %}?period={{ period.pk }}">Export CSV</a>
+    <a class="btn small" href="{% url 'dues:period_detail' period.pk %}">Period &amp; printing</a></div>
+  <table>
+    <thead><tr><th>Home</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Unpaid</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for s in statuses %}
+      <tr><td><a href="{% url 'dues:home_ledger' s.invoice.home_id %}">{{ s.invoice.home.address }}</a></td>
+        <td class="num">{{ s.invoice.amount_cents|add:s.late_fee_cents|money }}</td>
+        <td class="num">{{ s.paid_cents|money }}</td>
+        <td class="num">{{ s.unpaid_cents|money }}</td>
+        <td><span class="badge {% if s.state == 'paid' %}ok{% elif s.state == 'overdue' %}danger{% else %}warn{% endif %}">{{ s.state|capfirst }}</span></td></tr>
+    {% empty %}<tr><td colspan="5" class="empty">No invoices{% if state %} with this status{% endif %}.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="grid two" style="margin-top:1rem">
+  <div class="card">
+    <div class="row"><h2 class="grow" style="margin:0">Balances owed</h2><a class="btn small" href="{% url 'dues:report_csv' %}">Export all balances</a></div>
+    <p class="muted">{{ owing|length }} home{{ owing|length|pluralize }} owe {{ total_owed|money }} in total.</p>
+    <ul class="list">{% for home, bal in owing|slice:":15" %}<li class="row"><a class="grow" href="{% url 'dues:home_ledger' home.pk %}">{{ home.address }}</a><span>{{ bal|money }}</span></li>{% empty %}<li class="muted">Nobody owes anything. 🎉</li>{% endfor %}</ul>
+  </div>
+  <div class="card">
+    <div class="row"><h2 class="grow" style="margin:0">Recent payments</h2><a class="btn small primary" href="{% url 'dues:payment_new' %}">Record payment</a></div>
+    <ul class="list">{% for p in recent_payments %}<li class="row"><span class="grow">{{ p.home.address }}<br><small class="muted">{{ p.received_on|date:"M j" }} · {{ p.get_method_display }}{% if p.check_number %} #{{ p.check_number }}{% endif %}</small></span><span {% if p.voided_at %}style="text-decoration:line-through"{% endif %}>{{ p.amount_cents|money }}</span></li>{% empty %}<li class="muted">No payments yet.</li>{% endfor %}</ul>
+  </div>
+</div>
+{% endblock %}
