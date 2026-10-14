@@ -5,7 +5,10 @@
 <div class="card">
   <h1>Document categories</h1>
   <ul class="list">{% for c in categories %}
-    <li class="row"><span class="grow">{{ c.name }} <small class="muted">(order {{ c.sort_order }})</small></span>
+    <li class="row"><form method="post" class="row grow" style="gap:.4rem;flex-wrap:nowrap">{% csrf_token %}
+        <input type="text" name="name" value="{{ c.name }}" maxlength="80" aria-label="Name" style="flex:3">
+        <input type="number" name="sort_order" value="{{ c.sort_order }}" min="0" aria-label="Order" style="flex:1;max-width:5rem">
+        <button class="small" name="edit" value="{{ c.pk }}" type="submit">Save</button></form>
       <form method="post" class="inline-form" onsubmit="return confirm('Remove this category?')">{% csrf_token %}<button class="small" name="delete" value="{{ c.pk }}" type="submit">Remove</button></form></li>
   {% endfor %}</ul>
   <h2>Add a category</h2>

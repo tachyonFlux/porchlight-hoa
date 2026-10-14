@@ -14,9 +14,25 @@ from apps.core.utils import absolute_url
 from .models import Deadline, DeadlineReminder, add_years
 
 
+def _next_fields(deadline, today):
+    """What the next yearly occurrence looks like: same item, a year on, never already past."""
+    due = add_years(deadline.due_date, 1)
+    while due < today:  # completed very late: skip to the next date that's still ahead
+        due = add_years(due, 1)
+    return {
+        "title": deadline.title,
+        "category": deadline.category,
+        "description": deadline.description,
+        "due_date": due,
+        "recurrence": deadline.recurrence,
+        "remind_days": deadline.remind_days,
+        "owner_id": deadline.owner_id,
+    }
+
+
 @transaction.atomic
 def complete(deadline, user, note="", request=None):
-    """Mark done; a yearly deadline gets next year's copy (once)."""
+    """Mark done; a yearly deadline gets next year's copy (once, reusing one that exists)."""
     deadline = Deadline.objects.select_for_update().get(pk=deadline.pk)
     if deadline.is_done:
         return deadline.next_occurrence
@@ -25,14 +41,20 @@ def complete(deadline, user, note="", request=None):
     deadline.completion_note = note
     nxt = None
     if deadline.recurrence == Deadline.Recurrence.YEARLY:
-        nxt = Deadline.objects.create(
-            title=deadline.title,
-            category=deadline.category,
-            description=deadline.description,
-            due_date=add_years(deadline.due_date, 1),
-            recurrence=deadline.recurrence,
-            remind_days=deadline.remind_days,
-            owner=deadline.owner,
+        fields = _next_fields(deadline, timezone.localdate())
+        nxt = (
+            deadline.next_occurrence
+            or (
+                Deadline.objects.filter(
+                    title=fields["title"],
+                    due_date=fields["due_date"],
+                    completed_at__isnull=True,
+                    previous_occurrence__isnull=True,
+                )
+                .exclude(pk=deadline.pk)
+                .first()
+            )
+            or Deadline.objects.create(**fields)
         )
         deadline.next_occurrence = nxt
     deadline.save()
@@ -42,36 +64,45 @@ def complete(deadline, user, note="", request=None):
 
 @transaction.atomic
 def reopen(deadline, user, request=None):
-    """Undo a completion. Removes the auto-created next occurrence if it's untouched."""
+    """Undo a completion. The auto-created next occurrence is removed only if nobody has
+    touched it (edited, completed, or reminded); otherwise it stays, still linked."""
     deadline = Deadline.objects.select_for_update().get(pk=deadline.pk)
     nxt = deadline.next_occurrence
+    pristine = (
+        nxt is not None
+        and not nxt.is_done
+        and not nxt.reminders.exists()
+        and all(getattr(nxt, k) == v for k, v in _next_fields(deadline, timezone.localdate()).items())
+    )
     deadline.completed_at = None
     deadline.completed_by = None
     deadline.completion_note = ""
-    deadline.next_occurrence = None
+    if pristine:
+        deadline.next_occurrence = None
     deadline.save()
-    if nxt and not nxt.is_done and not nxt.reminders.exists():
+    if pristine:
         nxt.delete()
     audit.record(request or user, "compliance.reopened", deadline)
 
 
 def _recipients(deadline):
-    if deadline.owner and deadline.owner.is_active:
-        return [deadline.owner.email]
+    """The owner while they're still on the board; otherwise the whole board."""
+    owner = deadline.owner
+    if owner and owner.is_active and owner.is_board:
+        return [owner.email]
     return list(board_members().values_list("email", flat=True))
 
 
 def _send(deadline, days_before, template):
+    recipients = _recipients(deadline)
+    if not recipients:
+        return False  # nobody to tell yet; try again tomorrow
     try:
         with transaction.atomic():
             DeadlineReminder.objects.create(deadline=deadline, days_before=days_before)
     except IntegrityError:
         return False
-    send_bulk(
-        _recipients(deadline),
-        template,
-        {"deadline": deadline, "url": absolute_url(reverse("compliance:list"))},
-    )
+    send_bulk(recipients, template, {"deadline": deadline, "url": absolute_url(reverse("compliance:list"))})
     return True
 
 
@@ -79,9 +110,13 @@ def send_reminders(today):
     """For each open deadline send at most one reminder a day: the closest threshold
     reached that hasn't been sent, plus a single 'overdue' alert. Idempotent."""
     sent = {"reminders": 0, "overdue": 0}
-    for deadline in Deadline.objects.filter(completed_at__isnull=True).select_related("owner"):
+    for deadline in (
+        Deadline.objects.filter(completed_at__isnull=True)
+        .select_related("owner")
+        .prefetch_related("reminders")
+    ):
         days_left = (deadline.due_date - today).days
-        already = set(deadline.reminders.values_list("days_before", flat=True))
+        already = {r.days_before for r in deadline.reminders.all()}
         if days_left < 0:
             if DeadlineReminder.OVERDUE not in already and _send(
                 deadline, DeadlineReminder.OVERDUE, "compliance/email/overdue"

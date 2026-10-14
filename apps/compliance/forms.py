@@ -16,8 +16,17 @@ class DeadlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["owner"].queryset = board_members()
+        owners = board_members()
+        if self.instance.owner_id:  # keep a former board member selectable so the form still saves
+            owners = owners | type(self.instance.owner).objects.filter(pk=self.instance.owner_id)
+        self.fields["owner"].queryset = owners.distinct()
         self.fields["owner"].empty_label = "Whole board"
+        if self.instance.owner_id and not self.instance.owner.is_board:
+            self.fields[
+                "owner"
+            ].help_text = (
+                f"{self.instance.owner} is no longer on the board, so reminders go to the whole board."
+            )
 
 
 class CompleteForm(forms.Form):

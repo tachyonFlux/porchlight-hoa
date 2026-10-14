@@ -94,8 +94,20 @@ def categories(request):
     form = CategoryForm(request.POST or None)
     if request.method == "POST":
         if request.POST.get("delete", "").isdigit():
-            DocumentCategory.objects.filter(pk=int(request.POST["delete"])).delete()
+            category = DocumentCategory.objects.filter(pk=int(request.POST["delete"])).first()
+            if category:
+                audit.record(request, "documents.category_deleted", category)
+                category.delete()
             messages.success(request, "Category removed. Its documents are now uncategorized.")
+            return redirect("documents:categories")
+        if request.POST.get("edit", "").isdigit():
+            category = get_object_or_404(DocumentCategory, pk=int(request.POST["edit"]))
+            edit_form = CategoryForm(request.POST, instance=category)
+            if edit_form.is_valid():
+                edit_form.save()
+                messages.success(request, "Category saved.")
+            else:
+                messages.error(request, " ".join(e for errs in edit_form.errors.values() for e in errs))
             return redirect("documents:categories")
         if form.is_valid():
             form.save()
@@ -121,7 +133,7 @@ def share_create(request):
     initial = {}
     if request.GET.get("document", "").isdigit():
         initial["documents"] = [int(request.GET["document"])]
-    form = ShareLinkForm(request.POST or None, initial=initial)
+    form = ShareLinkForm(request.POST or None, initial=initial, user=request.user)
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
         link, raw = services.create_share_link(
@@ -165,6 +177,12 @@ def _no_store(response):
     return response
 
 
+def _within_visit_limit(request, link):
+    """Each visitor gets 60 requests an hour per link, so a forwarded link can't flood the
+    access log or the bandwidth."""
+    return hit("share-visit", f"{link.pk}:{client_ip(request)}", limit=60, period=3600)
+
+
 def _shared_link_or_none(request, token):
     link = ShareLink.find(token)
     if link is None and not hit("share-miss", client_ip(request), limit=30, period=3600):
@@ -178,13 +196,14 @@ def shared(request, token):
         return blocked
     if link is None:
         return _no_store(render(request, "documents/shared_gone.html", status=404))
+    if not _within_visit_limit(request, link):
+        return too_many(request)
     if not link.is_active:
         services.log_access(request, link, allowed=False)
         return _no_store(render(request, "documents/shared_gone.html", {"link": link}, status=410))
     services.log_access(request, link)
-    return _no_store(
-        render(request, "documents/shared.html", {"link": link, "token": token, "docs": link.documents.all()})
-    )
+    docs = [d for d in link.documents.all() if services.shareable(link, d)]
+    return _no_store(render(request, "documents/shared.html", {"link": link, "token": token, "docs": docs}))
 
 
 def shared_download(request, token, doc_pk):
@@ -193,12 +212,16 @@ def shared_download(request, token, doc_pk):
         return blocked
     if link is None:
         return _no_store(render(request, "documents/shared_gone.html", status=404))
+    if not _within_visit_limit(request, link):
+        return too_many(request)
     document = link.documents.filter(pk=doc_pk).first()
-    if document is None:
+    if document is None or not services.shareable(link, document):
         return _no_store(render(request, "documents/shared_gone.html", status=404))
     if not services.claim_download(link):
         services.log_access(request, link, document, allowed=False)
         link.refresh_from_db()
         return _no_store(render(request, "documents/shared_gone.html", {"link": link}, status=410))
     services.log_access(request, link, document)
-    return _no_store(serve_private(document.file, document.download_name))
+    # Always a download (never shown inline on our domain), so saving from a browser
+    # viewer can't fetch it a second time against the download limit.
+    return _no_store(serve_private(document.file, document.download_name, inline=False))

@@ -4,7 +4,7 @@
 {% block content %}
 <div class="card">
   <h1>Documents from {{ hoa.display_name }}</h1>
-  <p class="muted">Shared for: {{ link.label }}. This link expires {{ link.expires_at|date:"F j, Y" }}{% if link.max_views %} or after {{ link.max_views }} downloads{% endif %}.</p>
+  <p class="muted">This link expires {{ link.expires_at|date:"F j, Y" }}{% if link.max_views %} or after {{ link.max_views }} downloads in total{% endif %}.</p>
   <ul class="list">{% for d in docs %}
     <li class="row"><span class="grow"><strong>{{ d.title }}</strong><br><small class="muted">{{ d.extension|upper }} · {{ d.file_size|filesizeformat }}</small></span>
       <a class="btn small primary" href="{% url 'documents:shared_download' token d.pk %}" rel="noreferrer">Download</a></li>

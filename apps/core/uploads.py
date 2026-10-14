@@ -138,7 +138,6 @@ MAX_IMAGE_PIXELS = 50_000_000  # ~50 megapixels; bigger is rejected as a possibl
 def strip_image_metadata(f):
     """Return a cleaned copy of an uploaded image (same name), or the original if not re-encodable."""
     import io
-    import warnings
 
     from django.core.files.base import ContentFile
     from PIL import Image, ImageOps
@@ -147,22 +146,25 @@ def strip_image_metadata(f):
     fmt = _REENCODE.get(ext)
     if fmt is None:
         return f
-    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    too_big = ValidationError("That image is too large to process.")
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(f) as img:
-                if fmt == "GIF" and getattr(img, "is_animated", False):
-                    f.seek(0)
-                    return f  # keep animation; GIFs don't carry EXIF location data
-                img = ImageOps.exif_transpose(img)  # keep the photo the right way up
-                if fmt == "JPEG" and img.mode not in ("RGB", "L"):
-                    img = img.convert("RGB")
-                out = io.BytesIO()
-                save_kwargs = {"quality": 90} if fmt in ("JPEG", "WEBP") else {}
-                img.save(out, fmt, **save_kwargs)
-    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
-        raise ValidationError("That image is too large to process.") from exc
+        with Image.open(f) as img:  # reads only the header, so the size check is cheap
+            # Checked explicitly (not via Pillow's global limit) so it's safe with threads.
+            if img.width * img.height > MAX_IMAGE_PIXELS:
+                raise too_big
+            if fmt == "GIF" and getattr(img, "is_animated", False):
+                f.seek(0)
+                return f  # keep animation; GIFs don't carry EXIF location data
+            img = ImageOps.exif_transpose(img)  # keep the photo the right way up
+            if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            out = io.BytesIO()
+            save_kwargs = {"quality": 90} if fmt in ("JPEG", "WEBP") else {}
+            img.save(out, fmt, **save_kwargs)
+    except ValidationError:
+        raise
+    except Image.DecompressionBombError as exc:
+        raise too_big from exc
     except Exception as exc:  # truncated or corrupt image
         raise ValidationError("We couldn't read that image. Try a different file.") from exc
     return ContentFile(out.getvalue(), name=os.path.basename(f.name))

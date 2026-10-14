@@ -42,7 +42,11 @@ class Document(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["category__sort_order", "category__name", "title"]
+        ordering = [
+            models.F("category__sort_order").asc(nulls_last=True),
+            models.F("category__name").asc(nulls_last=True),
+            "title",
+        ]
 
     def __str__(self):
         return self.title
@@ -65,12 +69,21 @@ class ShareLink(models.Model):
     Only a hash of the token is stored; the full link is shown once, when it's created.
     """
 
-    label = models.CharField(max_length=150, help_text="Who it's for, e.g. 'Smith closing, 12 Elm St'.")
+    label = models.CharField(
+        max_length=150,
+        help_text="For your records only (not shown on the shared page), e.g. 'Closing, March'.",
+    )
     token_hash = models.CharField(max_length=64, unique=True)
     documents = models.ManyToManyField(Document, related_name="share_links")
     expires_at = models.DateTimeField()
     max_views = models.PositiveIntegerField(
-        null=True, blank=True, help_text="Optional: stop working after this many visits."
+        "maximum downloads",
+        null=True,
+        blank=True,
+        help_text="Optional: stop working after this many downloads in total (each file counts).",
+    )
+    allow_board_only = models.BooleanField(
+        default=False, help_text="Created by an admin and allowed to include board-only documents."
     )
     view_count = models.PositiveIntegerField(default=0)
     revoked_at = models.DateTimeField(null=True, blank=True)
@@ -113,6 +126,7 @@ class ShareLink(models.Model):
 class ShareLinkAccess(models.Model):
     link = models.ForeignKey(ShareLink, on_delete=models.CASCADE, related_name="accesses")
     document = models.ForeignKey(Document, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    document_title = models.CharField(max_length=150, blank=True)  # survives the document being deleted
     accessed_at = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=300, blank=True)
