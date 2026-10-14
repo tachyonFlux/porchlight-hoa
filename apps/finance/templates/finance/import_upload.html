@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Import transactions{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Import bank transactions</h1></div>
+{% include "finance/_nav.html" with tab="import" %}
+<div class="grid sidebar">
+  <div class="card"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% include "partials/form.html" %}<button class="primary" type="submit">Upload</button></form></div>
+  <div class="card"><h2 style="margin-top:0">Tips</h2>
+    <ul>
+      <li>Download transactions from your bank's website. OFX/QFX ("Quicken" or "Money") files are best because each transaction has a unique ID.</li>
+      <li>Banks often limit each download to about 90 days. Import as many files as you need; overlapping days are skipped automatically.</li>
+      <li>Stick with one format per account. Mixing CSV and OFX for the same days can create duplicates.</li>
+      <li>Porchlight only reads the files you upload. It never asks for, or stores, your bank login.</li>
+    </ul></div>
+</div>
+{% endblock %}

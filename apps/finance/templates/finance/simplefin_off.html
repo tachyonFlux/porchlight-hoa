@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Bank sync{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card"><h1>Automatic bank sync is off</h1>
+  <p>Importing files downloaded from your bank always works and needs no setup.</p>
+  <p class="muted">To use optional read-only sync through SimpleFIN Bridge, the server admin sets <code>PORCHLIGHT_SIMPLEFIN_ENABLED=1</code> and a <code>PORCHLIGHT_ENCRYPTION_KEY</code> (see the README), then restarts Porchlight.</p>
+  <a class="btn" href="{% url 'finance:overview' %}">Back</a></div>
+{% endblock %}

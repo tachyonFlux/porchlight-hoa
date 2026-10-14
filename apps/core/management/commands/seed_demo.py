@@ -148,6 +148,7 @@ class Command(BaseCommand):
         self._seed_meetings(rng, admin)
         self._seed_community_life(admin, created_homes)
         self._seed_compliance_and_documents(admin)
+        self._seed_finance(rng, admin)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -336,3 +337,72 @@ class Command(BaseCommand):
                 file_size=len(pdf),
                 uploaded_by=admin,
             )
+
+    def _seed_finance(self, rng, admin):
+        """A checking account with a few months of made-up bank activity and some rules."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.dues.models import Payment
+        from apps.finance import services as finance
+        from apps.finance.models import Account, BankAccount, CategoryRule
+        from apps.finance.parsers import ParsedRow, assign_dedupe_keys
+
+        today = timezone.localdate()
+        bank = BankAccount.objects.create(
+            name="Operating checking",
+            last4="0042",
+            opening_balance_cents=1250000,
+            opening_date=today.replace(month=1, day=1),
+        )
+        acct = {a.code: a for a in Account.objects.all()}
+        for pattern, code in [
+            ("LAWN", "5000"),
+            ("BGE", "5100"),
+            ("INSURANCE", "5200"),
+            ("INTEREST", "4100"),
+            ("SERVICE CHARGE", "5900"),
+            ("DEPOSIT", "4000"),
+        ]:
+            CategoryRule.objects.create(pattern=pattern, account=acct[code])
+        rows = []
+        # Deposit each recorded dues payment a few days after it arrived.
+        for payment in Payment.objects.filter(voided_at__isnull=True):
+            on = min(payment.received_on + timedelta(days=rng.randint(1, 5)), today)
+            rows.append(ParsedRow(line=0, date=on, description="DEPOSIT", amount_cents=payment.amount_cents))
+        start = today.replace(month=1, day=1)
+        for month in range(1, today.month + 1):
+            first = start.replace(month=month)
+            rows += [
+                ParsedRow(
+                    line=0,
+                    date=first + timedelta(days=11),
+                    description="ACH DEBIT GREENSCAPE LAWN CARE",
+                    amount_cents=-rng.choice([85000, 92000]),
+                ),
+                ParsedRow(
+                    line=0,
+                    date=first + timedelta(days=17),
+                    description="BGE UTILITY PAYMENT",
+                    amount_cents=-rng.randint(9000, 16000),
+                ),
+                ParsedRow(
+                    line=0,
+                    date=first + timedelta(days=27),
+                    description="INTEREST PAYMENT",
+                    amount_cents=rng.randint(80, 140),
+                ),
+            ]
+        rows.append(
+            ParsedRow(
+                line=0,
+                date=start + timedelta(days=40),
+                description="CHECK 1101 ACME INSURANCE",
+                amount_cents=-420000,
+                check_number="1101",
+            )
+        )
+        rows = [r for r in rows if r.date <= today]
+        assign_dedupe_keys(rows)
+        finance.import_rows(rows, bank, "csv", "demo-bank-export.csv", admin)

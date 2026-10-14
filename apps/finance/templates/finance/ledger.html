@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Tax ledger {{ year }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Tax ledger</h1>
+  <form method="get" class="actions"><select name="year" style="width:auto">{% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}</select><button type="submit">Show</button></form></div>
+{% include "finance/_nav.html" with tab="ledger" %}
+<p class="muted">Calendar year {{ year }}, from imported bank transactions (cash basis). Transfers between the HOA's own accounts are left out.</p>
+<div class="card table-wrap">{% include "finance/_ledger_summary.html" %}</div>
+<div class="actions" style="margin-top:1rem">
+  <a class="btn" href="{% url 'finance:ledger_csv' %}?year={{ year }}">Download CSV (every transaction)</a>
+  <a class="btn" target="_blank" href="{% url 'finance:ledger_print' %}?year={{ year }}">Printable report</a>
+  <a class="btn" href="{% url 'finance:ledger_print' %}?year={{ year }}&amp;format=pdf">PDF for the accountant</a>
+</div>
+{% endblock %}

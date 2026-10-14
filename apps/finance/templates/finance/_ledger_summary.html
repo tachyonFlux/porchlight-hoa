@@ -1,0 +1,12 @@
+{% load porchlight %}
+<table class="ledger"><thead><tr><th>Category</th><th class="num">Transactions</th><th class="num">Amount</th></tr></thead>
+<tbody>
+  <tr><th colspan="3">Income</th></tr>
+  {% for l in summary.income %}<tr><td>{{ l.account.code }} {{ l.account.name }}</td><td class="num">{{ l.count }}</td><td class="num">{{ l.net_cents|money }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">None</td></tr>{% endfor %}
+  <tr><td><strong>Total income</strong></td><td></td><td class="num"><strong>{{ summary.total_income|money }}</strong></td></tr>
+  <tr><th colspan="3">Expenses</th></tr>
+  {% for l in summary.expense %}<tr><td>{{ l.account.code }} {{ l.account.name }}</td><td class="num">{{ l.count }}</td><td class="num">{{ l.net_cents|money }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">None</td></tr>{% endfor %}
+  <tr><td><strong>Total expenses</strong></td><td></td><td class="num"><strong>{{ summary.total_expense|money }}</strong></td></tr>
+  <tr><td><strong>Income minus expenses</strong></td><td></td><td class="num"><strong>{{ summary.net|money }}</strong></td></tr>
+</tbody></table>
+{% if summary.uncategorized %}<p style="color:var(--danger)">{{ summary.uncategorized.count }} transaction{{ summary.uncategorized.count|pluralize }} still uncategorized ({{ summary.uncategorized.income_cents|money }} in, {{ summary.uncategorized.expense_cents|money }} out) and not included above.</p>{% endif %}

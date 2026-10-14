@@ -16,6 +16,7 @@ from apps.community.models import Home, Residency
 from apps.community.services import is_household_member
 from apps.core import audit
 from apps.core.models import HOASettings
+from apps.core.pdf import render_pdf
 from apps.core.permissions import board_required, treasurer_required
 from apps.core.ratelimit import rate_limit
 from apps.core.utils import absolute_url
@@ -108,17 +109,7 @@ def _render_invoices_html(invoices):
 
 
 def _pdf_response(invoices, filename):
-    # Imported lazily: WeasyPrint is slow to import and only needed here.
-    from weasyprint import HTML
-    from weasyprint.urls import URLFetcher
-
-    class NoFetch(URLFetcher):
-        """Invoices are self-contained; never let rendered content fetch files or URLs."""
-
-        def fetch(self, url, headers=None):
-            raise ValueError("External resources are disabled for PDFs.")
-
-    pdf = HTML(string=_render_invoices_html(invoices), url_fetcher=NoFetch()).write_pdf()
+    pdf = render_pdf(_render_invoices_html(invoices))
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="{filename}"'
     return response

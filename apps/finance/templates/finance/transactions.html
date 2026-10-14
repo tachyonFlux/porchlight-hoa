@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Transactions</h1></div>
+{% include "finance/_nav.html" with tab="transactions" %}
+<form class="search-form" method="get" style="flex-wrap:wrap">
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Search description or check #" style="min-width:12rem">
+  <select name="year" style="width:auto"><option value="">All years</option>{% for y in years %}<option value="{{ y }}" {% if f.year == y|stringformat:"d" %}selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+  <select name="bank" style="width:auto"><option value="">All accounts</option>{% for b in banks %}<option value="{{ b.pk }}" {% if f.bank == b.pk|stringformat:"d" %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select>
+  <select name="account" style="width:auto"><option value="">All categories</option><option value="none" {% if f.account == 'none' %}selected{% endif %}>Uncategorized</option>{% for a in accounts %}<option value="{{ a.pk }}" {% if f.account == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.name }}</option>{% endfor %}</select>
+  <button type="submit">Filter</button>
+</form>
+<div class="card table-wrap"><table>
+  <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Category</th></tr></thead>
+  <tbody>{% for t in page %}
+    <tr><td style="white-space:nowrap">{{ t.date|date:"M j, Y" }}</td>
+      <td><small>{{ t.description }}{% if t.check_number %} · check {{ t.check_number }}{% endif %}</small>{% if t.matches %} <span class="badge ok" title="Matched to dues payments">dues</span>{% endif %}</td>
+      <td class="num" {% if t.amount_cents > 0 %}style="color:var(--ok)"{% endif %}>{{ t.amount_cents|money }}</td>
+      <td>{% if can_edit %}{% include "finance/_txn_category.html" %}{% else %}{{ t.account.name|default:"—" }}{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="4" class="empty">No transactions.</td></tr>{% endfor %}</tbody></table></div>
+{% if page.has_other_pages %}<p class="actions">{% if page.has_previous %}<a class="btn small" href="?{{ querystring }}&amp;page={{ page.previous_page_number }}">Newer</a>{% endif %}<span class="muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn small" href="?{{ querystring }}&amp;page={{ page.next_page_number }}">Older</a>{% endif %}</p>{% endif %}
+{% endblock %}

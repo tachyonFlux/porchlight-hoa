@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Import finished{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card"><h1>Import finished</h1>
+  <p>{{ batch.filename }}{% if batch.bank_account %} → {{ batch.bank_account }}{% endif %}</p>
+  <ul><li><strong>{{ batch.rows_imported }}</strong> new transaction{{ batch.rows_imported|pluralize }}</li>
+    <li>{{ batch.rows_duplicate }} already imported (skipped)</li>
+    {% if batch.rows_error %}<li>{{ batch.rows_error }} couldn't be read (skipped)</li>{% endif %}</ul>
+  <div class="actions"><a class="btn primary" href="{% url 'finance:transactions' %}?account=none">Categorize</a><a class="btn" href="{% url 'finance:reconcile' %}">Match deposits</a><a class="btn" href="{% url 'finance:import_upload' %}">Import another</a></div>
+</div>
+{% endblock %}

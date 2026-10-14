@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}SimpleFIN{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Automatic bank sync (SimpleFIN)</h1>
+  <p class="muted">Read-only. Porchlight never sees your bank login: you connect your bank on the SimpleFIN Bridge website (a small yearly fee applies there), then paste a one-time setup token here. Check that your bank is listed on the Bridge before relying on it; file import is always available as a fallback.</p>
+  {% if conn %}
+    <p><strong>Connected.</strong> Last sync: {% if conn.last_sync_at %}{{ conn.last_sync_at|date:"M j, g:i a" }}{% else %}never{% endif %}.</p>
+    {% if conn.last_error %}<div class="callout" style="background:var(--warn-soft)">{{ conn.last_error }}</div>{% endif %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="link">
+      <h2>Which account does each feed?</h2>
+      <ul class="list">{% for l in links %}<li class="row"><span class="grow">{{ l.remote_name }}{% if l.last_balance_cents is not None %}<br><small class="muted">Bank says {{ l.last_balance_cents|money }}</small>{% endif %}</span>
+        <select name="link_{{ l.pk }}" style="width:auto"><option value="">Don't import</option>{% for b in banks %}<option value="{{ b.pk }}" {% if l.bank_account_id == b.pk %}selected{% endif %}>{{ b }}</option>{% endfor %}</select></li>
+      {% empty %}<li class="muted">No accounts reported yet. Try syncing.</li>{% endfor %}</ul>
+      <button class="primary" type="submit">Save</button>
+    </form>
+    <div class="actions" style="margin-top:1rem">
+      <form method="post" class="inline-form">{% csrf_token %}<button name="action" value="sync" type="submit">Sync now</button></form>
+      <form method="post" class="inline-form" onsubmit="return confirm('Disconnect and delete the saved access?')">{% csrf_token %}<button class="danger" name="action" value="disconnect" type="submit">Disconnect</button></form>
+    </div>
+  {% else %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="connect">{% include "partials/form.html" %}<button class="primary" type="submit">Connect</button></form>
+  {% endif %}
+</div>
+{% endblock %}

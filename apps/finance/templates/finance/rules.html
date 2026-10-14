@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Rules{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Categorizing rules</h1></div>
+{% include "finance/_nav.html" with tab="rules" %}
+<p class="muted">New transactions are checked against these rules in order; the first match sets the category. You can always change a category by hand.</p>
+<div class="grid sidebar">
+  <div class="card"><ul class="list">{% for r in rules %}
+    <li class="row"><span class="grow">{% if not r.is_active %}<s>{% endif %}Description {{ r.get_match_display }} “{{ r.pattern }}”{% if r.direction != 'any' %} ({{ r.get_direction_display|lower }}){% endif %} → <strong>{{ r.account.name }}</strong>{% if not r.is_active %}</s>{% endif %}<br><small class="muted">priority {{ r.priority }}</small></span>
+      <form method="post" class="inline-form">{% csrf_token %}<button class="small" name="delete" value="{{ r.pk }}" type="submit">Delete</button></form></li>
+  {% empty %}<li class="muted">No rules yet. Tip: when you categorize a transaction, tick "always" to make a rule from it.</li>{% endfor %}</ul>
+  <form method="post" style="margin-top:1rem">{% csrf_token %}<button class="small" name="apply" value="1" type="submit">Run rules on uncategorized transactions</button></form></div>
+  <div class="card"><h2 style="margin-top:0">Add a rule</h2><form method="post">{% csrf_token %}{% include "partials/form.html" %}<button class="primary" type="submit">Add rule</button></form></div>
+</div>
+{% endblock %}

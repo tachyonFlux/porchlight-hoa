@@ -1,0 +1,9 @@
+<div class="actions no-print" style="margin-bottom:1rem">
+  <a class="btn small {% if tab == 'overview' %}primary{% endif %}" href="{% url 'finance:overview' %}">Overview</a>
+  <a class="btn small {% if tab == 'import' %}primary{% endif %}" href="{% url 'finance:import_upload' %}">Import</a>
+  <a class="btn small {% if tab == 'transactions' %}primary{% endif %}" href="{% url 'finance:transactions' %}">Transactions</a>
+  <a class="btn small {% if tab == 'reconcile' %}primary{% endif %}" href="{% url 'finance:reconcile' %}">Match deposits</a>
+  <a class="btn small {% if tab == 'rules' %}primary{% endif %}" href="{% url 'finance:rules' %}">Rules</a>
+  <a class="btn small {% if tab == 'chart' %}primary{% endif %}" href="{% url 'finance:chart' %}">Categories</a>
+  <a class="btn small {% if tab == 'ledger' %}primary{% endif %}" href="{% url 'finance:ledger' %}">Tax ledger</a>
+</div>

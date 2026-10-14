@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Statements: {{ bank.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Statement check: {{ bank }}</h1></div>
+{% include "finance/_nav.html" %}
+<p class="muted">Enter the ending balance from each monthly statement. Porchlight compares it with the opening balance plus every imported transaction up to that date, so you can spot a missing import or a typo.</p>
+<div class="grid sidebar">
+  <div class="card table-wrap"><table><thead><tr><th>Statement date</th><th class="num">Statement</th><th class="num">Porchlight</th><th>Result</th></tr></thead><tbody>
+    {% for c in checks %}<tr><td>{{ c.statement.statement_date|date:"M j, Y" }}</td><td class="num">{{ c.statement.ending_balance_cents|money }}</td><td class="num">{{ c.book_cents|money }}</td>
+      <td>{% if c.ok %}<span class="badge ok">Matches</span>{% else %}<span class="badge danger">Off by {{ c.difference|money }}</span>{% endif %}{% if c.statement.note %}<br><small class="muted">{{ c.statement.note }}</small>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4" class="muted">No statements entered yet.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2 style="margin-top:0">Add a statement</h2><form method="post">{% csrf_token %}{% include "partials/form.html" %}<button class="primary" type="submit">Check</button></form></div>
+</div>
+{% endblock %}

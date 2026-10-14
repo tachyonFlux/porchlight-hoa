@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "apps.messaging",
     "apps.compliance",
     "apps.documents",
+    "apps.finance",
 ]
 
 MIDDLEWARE = [
@@ -208,6 +209,11 @@ SETUP_TOKEN_REQUIRED = not DEBUG
 # Send sign-in and claim emails from a background thread so response timing doesn't
 # reveal whether an address belongs to someone.
 EMAIL_ASYNC = env_bool("PORCHLIGHT_EMAIL_ASYNC", True)
+
+# Optional read-only bank sync via SimpleFIN. Needs an encryption key for the stored
+# access URL: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+SIMPLEFIN_ENABLED = env_bool("PORCHLIGHT_SIMPLEFIN_ENABLED", False)
+ENCRYPTION_KEY = env("PORCHLIGHT_ENCRYPTION_KEY", "")
 
 # The Django admin is a low-level escape hatch. Off by default; when on, it requires TOTP.
 ENABLE_DJANGO_ADMIN = env_bool("PORCHLIGHT_ENABLE_DJANGO_ADMIN", False)

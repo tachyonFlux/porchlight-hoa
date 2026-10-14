@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Match columns{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Match columns: {{ filename }}</h1></div>
+{% if saved %}<p>Saved layouts: {% for m in saved %}<a href="?mapping={{ m.pk }}">{{ m.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+<div class="card table-wrap"><h2 style="margin-top:0">First rows of your file</h2>
+  <table><thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead><tbody>{% for r in sample %}<tr>{% for c in r %}<td><small>{{ c }}</small></td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+<form method="post">{% csrf_token %}
+<div class="grid sidebar">
+  <div class="card">{% include "partials/form.html" %}
+    <div class="actions"><button type="submit" name="preview" value="1">Preview</button>{% if rows %}<button class="primary" type="submit" name="confirm" value="1">Import {{ ok_count }} row{{ ok_count|pluralize }}</button>{% endif %}</div></div>
+  <div>
+    {% if error %}<div class="callout" style="background:var(--danger-soft)">{{ error }}</div>{% endif %}
+    {% if rows %}
+    <div class="card table-wrap"><h2 style="margin-top:0">Preview</h2>
+      {% if bad %}<p style="color:var(--danger)">{{ bad|length }} row{{ bad|length|pluralize }} can't be read and will be skipped (first: line {{ bad.0.line }}: {{ bad.0.errors|join:", " }}).</p>{% endif %}
+      <table><thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>
+      {% for r in rows %}{% if r.ok %}<tr><td>{{ r.date|date:"M j, Y" }}</td><td><small>{{ r.description }}</small></td><td class="num">{{ r.amount_cents|money }}</td></tr>{% endif %}{% endfor %}</tbody></table>
+      <p class="muted"><small>Deposits should be positive and payments negative. If they're backwards, tick "Flip signs".</small></p></div>
+    {% endif %}
+  </div>
+</div>
+</form>
+{% endblock %}

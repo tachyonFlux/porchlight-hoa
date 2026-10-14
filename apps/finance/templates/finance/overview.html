@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Finances{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Finances</h1><a class="btn" href="{% url 'finance:bank_create' %}">Add bank account</a></div>
+{% include "finance/_nav.html" with tab="overview" %}
+<div class="grid three">
+  <a class="card stat" href="{% url 'finance:transactions' %}?account=none" style="text-decoration:none;color:inherit"><span class="num">{{ uncategorized }}</span><span class="label">transactions to categorize</span></a>
+  <a class="card stat" href="{% url 'finance:reconcile' %}" style="text-decoration:none;color:inherit"><span class="num">{{ suggested }}</span><span class="label">deposit matches to confirm</span></a>
+  <a class="card stat" href="{% url 'finance:reconcile' %}" style="text-decoration:none;color:inherit"><span class="num">{{ unmatched_deposits }}</span><span class="label">deposits not matched to dues</span></a>
+</div>
+<div class="card" style="margin-top:1rem">
+  <h2 style="margin-top:0">Bank accounts</h2>
+  <ul class="list">{% for b in banks %}
+    <li class="row"><span class="grow"><strong>{{ b.bank }}</strong>{% if b.bank.is_reserve %} <span class="badge">Reserve</span>{% endif %}<br>
+      <small class="muted">Balance from imported transactions: {{ b.balance|money }}
+      {% if b.last_check %} · statement {{ b.last_check.statement.statement_date|date:"M j" }}: {% if b.last_check.ok %}<span style="color:var(--ok)">matches ✓</span>{% else %}<span style="color:var(--danger)">off by {{ b.last_check.difference|money }}</span>{% endif %}{% endif %}</small></span>
+      <a class="btn small" href="{% url 'finance:statements' b.bank.pk %}">Statements</a><a class="btn small" href="{% url 'finance:bank_edit' b.bank.pk %}">Edit</a></li>
+  {% empty %}<li class="muted">Add your HOA's bank accounts first (just a name and the last four digits; never passwords).</li>{% endfor %}</ul>
+</div>
+<div class="grid two">
+  <div class="card"><h2 style="margin-top:0">Recent imports</h2>
+    <ul class="list">{% for batch in batches %}<li><a href="{% url 'finance:import_done' batch.pk %}">{{ batch.filename|default:batch.get_source_display }}</a><br><small class="muted">{{ batch.created_at|date:"M j, Y" }} · {{ batch.rows_imported }} new, {{ batch.rows_duplicate }} already imported{% if batch.rows_error %}, {{ batch.rows_error }} skipped{% endif %}</small></li>{% empty %}<li class="muted">No imports yet.</li>{% endfor %}</ul>
+  </div>
+  <div class="card"><h2 style="margin-top:0">Automatic bank sync</h2>
+    {% if simplefin_enabled %}
+      {% if simplefin %}<p>Connected through SimpleFIN. Last sync {% if simplefin.last_sync_at %}{{ simplefin.last_sync_at|timesince }} ago{% else %}never{% endif %}.{% if simplefin.last_error %}<br><small style="color:var(--danger)">{{ simplefin.last_error }}</small>{% endif %}</p>
+      {% else %}<p class="muted">Optional: connect read-only through SimpleFIN Bridge.</p>{% endif %}
+      <a class="btn small" href="{% url 'finance:simplefin' %}">SimpleFIN settings</a>
+    {% else %}<p class="muted">Off. Import files downloaded from your bank's website instead (always works). An admin can turn on optional SimpleFIN sync on the server; see the README.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

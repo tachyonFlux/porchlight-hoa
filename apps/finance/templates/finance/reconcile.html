@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Match deposits{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Match deposits to dues payments</h1>
+  <form method="post" action="{% url 'finance:reconcile_action' 0 %}" class="inline-form">{% csrf_token %}<button name="action" value="auto" type="submit">Find matches</button></form></div>
+{% include "finance/_nav.html" with tab="reconcile" %}
+<p class="muted">Each bank deposit is matched to the checks or cash the treasurer recorded. A single check that matches exactly is confirmed automatically; anything less certain is suggested for you to confirm.</p>
+
+{% if suggested %}
+<div class="card"><h2 style="margin-top:0">Suggested matches</h2>
+  <ul class="list">{% for d in suggested %}
+    <li><div class="row"><span class="grow"><strong>{{ d.amount_cents|money }}</strong> deposit on {{ d.date|date:"M j" }}<br><small class="muted">{{ d.description }}</small></span>
+      <form method="post" action="{% url 'finance:reconcile_action' d.pk %}" class="inline-form">{% csrf_token %}<button class="small primary" name="action" value="confirm">Confirm</button><button class="small" name="action" value="unmatch">Not a match</button></form></div>
+      <small>{% for m in d.payment_matches.all %}{{ m.payment.home.address }} · {{ m.payment.amount_cents|money }}{% if m.payment.check_number %} (#{{ m.payment.check_number }}){% endif %} · received {{ m.payment.received_on|date:"M j" }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</small></li>
+  {% endfor %}</ul></div>
+{% endif %}
+
+<div class="grid two">
+  <div class="card"><h2 style="margin-top:0">Deposits without a match</h2>
+    <p class="muted"><small>Not every deposit is dues (interest, refunds...). Those can stay unmatched.</small></p>
+    <ul class="list">{% for d in unmatched %}
+      <li><details><summary class="row" style="cursor:pointer"><span class="grow"><strong>{{ d.amount_cents|money }}</strong> on {{ d.date|date:"M j, Y" }}<br><small class="muted">{{ d.description|truncatechars:60 }}</small></span></summary>
+        <form method="post" action="{% url 'finance:reconcile_action' d.pk %}" style="margin-top:.5rem">{% csrf_token %}
+          <p class="muted"><small>Tick the payments in this deposit (they must add up to {{ d.amount_cents|money }}):</small></p>
+          {% for p in payments %}<label style="font-weight:normal"><input type="checkbox" name="payments" value="{{ p.pk }}"> {{ p.home.address }} · {{ p.amount_cents|money }}{% if p.check_number %} #{{ p.check_number }}{% endif %} · {{ p.received_on|date:"M j" }}</label>{% empty %}<p class="muted">No unmatched payments.</p>{% endfor %}
+          {% if payments %}<button class="small primary" name="action" value="match" type="submit">Match</button>{% endif %}
+        </form></details></li>
+    {% empty %}<li class="muted">All deposits are matched.</li>{% endfor %}</ul></div>
+  <div class="card"><h2 style="margin-top:0">Recorded payments not yet seen at the bank</h2>
+    <p class="muted"><small>{{ payments|length }} payment{{ payments|length|pluralize }}, {{ payments_total|money }} total. Usually these are checks that haven't been deposited yet.</small></p>
+    <ul class="list">{% for p in payments %}<li class="row"><span class="grow">{{ p.home.address }}<br><small class="muted">{{ p.get_method_display }}{% if p.check_number %} #{{ p.check_number }}{% endif %} · received {{ p.received_on|date:"M j, Y" }}</small></span><span>{{ p.amount_cents|money }}</span></li>{% empty %}<li class="muted">None.</li>{% endfor %}</ul></div>
+</div>
+{% endblock %}

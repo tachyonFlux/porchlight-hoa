@@ -1,0 +1,20 @@
+<!doctype html>
+{% load porchlight %}
+<html lang="en"><head><meta charset="utf-8"><title>{{ hoa.display_name }} ledger {{ year }}</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1f2a36; font-size: 10pt; margin: 1rem; }
+  h1 { font-size: 15pt; margin: 0; } h2 { font-size: 12pt; margin: 1.2rem 0 .4rem; }
+  .muted { color: #5d6875; }
+  table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .25rem .3rem; border-bottom: 1px solid #e3dccf; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  @page { size: letter; margin: .6in; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #5d6875; } }
+</style></head><body>
+<h1>{{ hoa.display_name }}: income &amp; expense ledger, {{ year }}</h1>
+<p class="muted">Cash basis, from bank transactions. Generated {{ generated|date:"F j, Y" }}. Prepared for review by the association's accountant.</p>
+<h2>Summary by category</h2>
+{% include "finance/_ledger_summary.html" %}
+<h2>All transactions</h2>
+<table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>
+{% for t in transactions %}<tr><td>{{ t.date|date:"m/d/Y" }}</td><td>{{ t.description }}{% if t.check_number %} (check {{ t.check_number }}){% endif %}</td><td>{% if t.account %}{{ t.account.code }} {{ t.account.name }}{% else %}<em>Uncategorized</em>{% endif %}</td><td class="num">{{ t.amount_cents|money }}</td></tr>{% endfor %}
+</tbody></table>
+</body></html>
