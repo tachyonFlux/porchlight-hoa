@@ -65,7 +65,7 @@ class TestWorksheet:
         assert r.lines[17] == 640_00 and r.lines[18] == 100_00 and r.lines[19] == 540_00
         assert r.lines[20] == 162_00  # 30% of 540
         gross, spend, res = r.tests
-        assert gross.passed and gross.actual_pct == Decimal("93.4")  # 9025 of 9665
+        assert gross.passed and gross.actual_pct == Decimal("93.3")  # 9025 of 9665
         assert spend.passed  # community events (300 of 7,800) are excluded by default: 96.2%
         assert res.passed  # all 10 homes residential
 
@@ -74,7 +74,7 @@ class TestWorksheet:
         r = services.compute(ws)
         spend = r.tests[1]
         assert r.total_expenses_cents == 7800_00 and r.property_expenses_cents == 7500_00
-        assert spend.actual_pct == Decimal("96.2") and spend.passed
+        assert spend.actual_pct == Decimal("96.1") and spend.passed
 
     def test_specific_deduction_never_makes_negative(self, bank):
         txn(bank, 1000_00, "4000")
@@ -164,7 +164,9 @@ class TestWorksheet:
 
     def test_due_date_skips_weekend(self):
         assert services.due_date(2025) == date(2026, 4, 15)  # a Wednesday
-        assert services.due_date(2028) == date(2029, 4, 16)  # the 15th is a Sunday
+        assert services.due_date(2028) == date(2029, 4, 17)  # Sun 15th, Mon 16th Emancipation Day
+        assert services.due_date(2027) == date(2028, 4, 18)  # Sat 15th, holiday observed Mon 17th
+        assert services.due_date(2021) == date(2022, 4, 18)  # matches the actual 2022 deadline
 
 
 @pytest.fixture
@@ -251,3 +253,71 @@ class TestViews:
         login(resident)
         for url in (reverse("tax:index"), reverse("tax:worksheet", args=[2025]), reverse("tax:rules")):
             assert client.get(url).status_code == 403
+
+
+class TestReviewFixes:
+    def test_no_rules_never_qualifies(self, books, homes):
+        TaxYearConfig.objects.all().delete()
+        ws = services.get_worksheet(2025)
+        ws.no_private_benefit = True
+        r = services.compute(ws)
+        assert not r.qualifies and r.lines[20] == 0
+
+    def test_threshold_compares_exact_amounts(self, bank, homes):
+        txn(bank, 10000_00, "4000")
+        txn(bank, -8996_00, "5000")
+        txn(bank, -1004_00, "5800")  # events: not property spending
+        ws = services.get_worksheet(2025)
+        spend = services.compute(ws).tests[1]
+        assert spend.actual_pct == Decimal("89.9") and not spend.passed  # 89.96% is not 90%
+
+    def test_condo_and_timeshare_tests(self, books):
+        ws = services.get_worksheet(2025)
+        ws.association_type = Worksheet.AssociationType.CONDO
+        ws.total_lots, ws.residential_lots = 10000, 9000
+        r = services.compute(ws)
+        assert "square feet" in r.tests[2].detail and r.tests[2].passed
+        ws.association_type = Worksheet.AssociationType.TIMESHARE
+        ws.no_private_benefit = True
+        r = services.compute(ws)
+        assert not r.tests[2].checked and r.qualifies is True  # the unchecked test is flagged instead
+        assert any("timeshare use test" in w for w in r.warnings)
+
+    def test_negative_lines(self, bank):
+        txn(bank, 1000_00, "4000")
+        ws = services.get_worksheet(2025)
+        ws.adjustments = {"5": {"cents": -500_00, "note": "loss"}, "6": {"cents": -5000_00, "note": "4797"}}
+        r = services.compute(ws)
+        assert r.lines[5] == 0 and r.lines[6] == -5000_00
+        assert r.tests[0].whole == 1000_00 and r.tests[0].passed  # losses don't shrink receipts
+        assert any("below zero" in w for w in r.warnings)
+
+    def test_inactive_category_stays_selectable(self, books, board_user, login):
+        events = acct("5800")
+        events.is_active = False
+        events.save()
+        page = login(board_user).get(reverse("tax:worksheet", args=[2025])).content.decode()
+        assert f'name="nonproperty" value="{events.pk}" checked' in page
+
+    def test_crafted_line_key_and_error_keeps_input(self, books, board_user, login):
+        client = login(board_user)
+        response = client.post(
+            reverse("tax:worksheet", args=[2025]),
+            {
+                "association_type": "residential",
+                "tax_exempt_interest_cents": "0",
+                "line_²": "7",
+                "adj_7_cents": "lots",
+            },
+        )
+        assert response.status_code == 200 and 'value="lots"' in response.content.decode()
+
+    def test_save_audits_changes(self, books, board_user, login):
+        from apps.core.models import AuditLog
+
+        login(board_user).post(
+            reverse("tax:worksheet", args=[2025]),
+            {"association_type": "residential", "tax_exempt_interest_cents": "0", "adj_7_cents": "12"},
+        )
+        entry = AuditLog.objects.filter(action="tax.worksheet_saved").latest("pk")
+        assert entry.changes["changed"]["adjustments"][1] == {"7": {"cents": 1200, "note": ""}}

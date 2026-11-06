@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 from django.utils import timezone
 
@@ -81,19 +81,25 @@ def get_worksheet(year):
     return ws
 
 
+def _emancipation_day_observed(year):
+    """DC Emancipation Day (April 16) moves the federal tax deadline; it's observed on the
+    nearest weekday when it falls on a weekend."""
+    day = date(year, 4, 16)
+    if day.weekday() == 5:
+        return day - timedelta(days=1)
+    if day.weekday() == 6:
+        return day + timedelta(days=1)
+    return day
+
+
 def due_date(year):
-    """15th day of the 4th month after a calendar tax year, moved past a weekend.
-    (Federal holidays can move it too; check the IRS calendar.)"""
+    """15th day of the 4th month after a calendar tax year, moved to the next business day
+    past weekends and DC Emancipation Day. (Check the IRS calendar for other closures.)"""
     due = date(year + 1, 4, 15)
-    while due.weekday() >= 5:
+    holiday = _emancipation_day_observed(year + 1)
+    while due.weekday() >= 5 or due == holiday:
         due += timedelta(days=1)
     return due
-
-
-def _pct(part, whole):
-    if not whole:
-        return None
-    return (Decimal(part) * 100 / Decimal(whole)).quantize(Decimal("0.1"))
 
 
 def _fmt(pct):
@@ -108,13 +114,27 @@ def _rate(cents, pct):
 @dataclass
 class Test:
     label: str
-    actual_pct: Decimal | None
+    part: int | None  # None = this test isn't checked here
+    whole: int
     required_pct: Decimal
     detail: str
 
     @property
+    def actual_pct(self):
+        """Rounded for display only; `passed` compares exact amounts."""
+        if self.part is None or not self.whole:
+            return None
+        return (Decimal(self.part) * 100 / Decimal(self.whole)).quantize(Decimal("0.1"), rounding=ROUND_FLOOR)
+
+    @property
+    def checked(self):
+        return self.part is not None
+
+    @property
     def passed(self):
-        return self.actual_pct is not None and self.actual_pct >= self.required_pct
+        if self.part is None or self.whole <= 0:
+            return False
+        return Decimal(self.part) * 100 >= self.required_pct * Decimal(self.whole)
 
 
 @dataclass
@@ -144,7 +164,12 @@ class Result:
 
     @property
     def qualifies(self):
-        return all(t.passed for t in self.tests) and self.worksheet.no_private_benefit
+        checked = [t for t in self.tests if t.checked]
+        return (
+            bool(self.config and checked)
+            and all(t.passed for t in checked)
+            and self.worksheet.no_private_benefit
+        )
 
     @property
     def due(self):
@@ -200,6 +225,9 @@ def compute(ws):
         if line in lines and cents:
             lines[line] += cents
             adjustments.append(LineItem(None, line, cents, adj.get("note", "")))
+    negative_income = [n for n in INCOME_LINES if lines[n] < 0 and n != 6]
+    # Capital gain net income can't be below zero (capital losses aren't deductible on 1120-H).
+    lines[5] = max(lines[5], 0)
     lines[8] = sum(lines[n] for n in INCOME_LINES)
     lines[16] = sum(lines[n] for n in DEDUCTION_LINES)
     lines[17] = lines[8] - lines[16]
@@ -208,13 +236,15 @@ def compute(ws):
     lines[19] = max(lines[17] - lines[18], 0)
 
     exempt_total = sum(i.net_cents for i in exempt)
-    gross_total = exempt_total + lines[8]
+    # The 60% test compares receipts; a loss on one line mustn't shrink (or flip) the total.
+    gross_total = max(exempt_total, 0) + sum(max(lines[n], 0) for n in INCOME_LINES)
     tests = []
     if config:
         tests.append(
             Test(
                 f"{_fmt(config.gross_income_test_pct)}% gross income test",
-                _pct(exempt_total, gross_total),
+                max(exempt_total, 0),
+                gross_total,
                 config.gross_income_test_pct,
                 f"Exempt function income {format_money(exempt_total)} of gross income "
                 f"{format_money(gross_total)}",
@@ -223,22 +253,40 @@ def compute(ws):
         tests.append(
             Test(
                 f"{_fmt(config.expenditure_test_pct)}% expenditure test",
-                _pct(prop_exp, total_exp),
+                prop_exp,
+                total_exp,
                 config.expenditure_test_pct,
                 f"Spending on association property {format_money(prop_exp)} of total spending "
-                f"{format_money(total_exp)}",
+                f"{format_money(total_exp)}"
+                + ("" if total_exp > 0 else " (no spending recorded; check the ledger)"),
             )
         )
         total_lots = ws.total_lots or 0
         residential = ws.residential_lots if ws.residential_lots is not None else total_lots
-        tests.append(
-            Test(
-                f"{_fmt(config.residential_test_pct)}% residential use test",
-                _pct(residential, total_lots),
-                config.residential_test_pct,
-                f"{residential} of {total_lots} lots zoned residential",
+        kind = ws.association_type
+        if kind == Worksheet.AssociationType.TIMESHARE:
+            tests.append(
+                Test(
+                    "Timeshare use test",
+                    None,
+                    0,
+                    config.residential_test_pct,
+                    "Not checked here; timeshare associations have their own use test. Ask your preparer.",
+                )
             )
-        )
+        else:
+            condo = kind == Worksheet.AssociationType.CONDO
+            unit = "square feet used residentially" if condo else "lots zoned residential"
+            tests.append(
+                Test(
+                    f"{_fmt(config.residential_test_pct)}% residential use test",
+                    residential,
+                    total_lots,
+                    config.residential_test_pct,
+                    f"{residential:,} of {total_lots:,} {unit}"
+                    + ("" if total_lots else " (enter the totals below)"),
+                )
+            )
 
     result = Result(
         year=year,
@@ -281,9 +329,26 @@ def compute(ws):
         )
     if not ws.no_private_benefit:
         w.append("Confirm that no member profits from the association's net earnings (see below).")
+    if negative_income:
+        w.append(
+            "Line "
+            + ", ".join(str(n) for n in negative_income)
+            + " is below zero (refunds or a negative adjustment). Check it with your preparer"
+            + (
+                "; line 5 is shown as zero because capital losses aren't deductible."
+                if 5 in negative_income
+                else "."
+            )
+        )
+    if kind_is_timeshare(ws):
+        w.append("The timeshare use test isn't checked by this worksheet.")
     if not exempt and not nonexempt:
         w.append(f"There's no income in the tax ledger for {year}.")
     return result
+
+
+def kind_is_timeshare(ws):
+    return ws.association_type == Worksheet.AssociationType.TIMESHARE
 
 
 def adjustments_for(adjustments, lines):

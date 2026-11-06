@@ -73,13 +73,17 @@ class Worksheet(models.Model):
         max_length=12, choices=AssociationType.choices, default=AssociationType.RESIDENTIAL
     )
     total_lots = models.PositiveIntegerField(
-        null=True, blank=True, help_text="All lots, including unimproved ones. Blank = number of homes."
-    )
-    residential_lots = models.PositiveIntegerField(
-        "lots zoned residential",
+        "total lots (condos: total square feet)",
         null=True,
         blank=True,
-        help_text="Lots used for pools, parking or similar for residents count as residential. Blank = all.",
+        help_text="HOA: all lots, including unimproved ones (blank = number of homes). "
+        "Condominium: total square footage of all units.",
+    )
+    residential_lots = models.PositiveIntegerField(
+        "lots zoned residential (condos: square feet used as residences)",
+        null=True,
+        blank=True,
+        help_text="Lots used for residents' pools, parking or similar count as residential. Blank = all.",
     )
     tax_exempt_interest_cents = models.BigIntegerField(
         "tax-exempt interest", default=0, help_text="Reported on item E, not as income."

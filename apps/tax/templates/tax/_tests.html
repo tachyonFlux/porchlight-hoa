@@ -1,5 +1,6 @@
 <table><tbody>
-{% for t in r.tests %}<tr><td>{% if t.passed %}<span class="badge ok">Pass</span>{% else %}<span class="badge danger">Not met</span>{% endif %}</td>
+{% if not r.config %}<tr><td><span class="badge danger">No rules</span></td><td colspan="2">No 1120-H rules are entered for this year, so nothing can be checked.</td></tr>{% endif %}
+{% for t in r.tests %}<tr><td>{% if not t.checked %}<span class="badge warn">Not checked</span>{% elif t.passed %}<span class="badge ok">Pass</span>{% else %}<span class="badge danger">Not met</span>{% endif %}</td>
   <td><strong>{{ t.label }}</strong><br><small class="muted">{{ t.detail }}</small></td>
   <td class="num">{% if t.actual_pct is not None %}{{ t.actual_pct }}%{% else %}—{% endif %}<br><small class="muted">need {{ t.required_pct|floatformat:"-2" }}%</small></td></tr>{% endfor %}
 <tr><td>{% if r.worksheet.no_private_benefit %}<span class="badge ok">Confirmed</span>{% else %}<span class="badge warn">Confirm</span>{% endif %}</td>

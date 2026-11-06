@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -6,12 +7,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.core import audit
-from apps.core.money import to_cents
+from apps.core.money import format_money, to_cents
 from apps.core.pdf import render_pdf
 from apps.core.permissions import board_required, treasurer_required
 from apps.core.utils import is_int
 from apps.finance.models import Account
-from apps.finance.services import years_with_data
+from apps.finance.services import ledger_summary, years_with_data
 
 from . import services
 from .forms import TaxYearConfigForm, WorksheetForm
@@ -49,24 +50,51 @@ def index(request):
 def worksheet(request, year):
     _check_year(year)
     ws = services.get_worksheet(year)
+    before = _snapshot(ws)
     form = WorksheetForm(request.POST or None, instance=ws)
+    posted_adjustments = None
     if request.method == "POST":
         if not _can_edit(request.user):
             raise Http404
-        if form.is_valid():
+        line_map, nonproperty, adjustments, errors = _line_inputs(request.POST)
+        if form.is_valid() and not errors:
             ws = form.save(commit=False)
-            ws.line_map, ws.nonproperty_accounts, ws.adjustments, errors = _line_inputs(request.POST)
-            if errors:
-                for e in errors:
-                    messages.error(request, e)
-            else:
-                ws.updated_by = request.user
-                ws.save()
-                audit.record(request, "tax.worksheet_saved", ws, {"year": year})
-                messages.success(request, "Worksheet saved.")
-                return redirect("tax:worksheet", year=year)
+            ws.line_map, ws.nonproperty_accounts, ws.adjustments = line_map, nonproperty, adjustments
+            ws.updated_by = request.user
+            ws.save()
+            after = _snapshot(ws)
+            audit.record(
+                request,
+                "tax.worksheet_saved",
+                ws,
+                {"year": year, "changed": {k: [before[k], after[k]] for k in after if before[k] != after[k]}},
+            )
+            messages.success(request, "Worksheet saved.")
+            return redirect("tax:worksheet", year=year)
+        for e in errors:
+            messages.error(request, e)
+        # Show the saved numbers, but keep what was typed so it can be corrected.
+        ws = services.get_worksheet(year)
+        posted_adjustments = {
+            str(n): {
+                "cents": request.POST.get(f"adj_{n}_cents", ""),
+                "note": request.POST.get(f"adj_{n}_note", ""),
+            }
+            for n in services.LINE_LABELS
+        }
     result = services.compute(ws)
-    expenses = Account.objects.filter(type=Account.Type.EXPENSE, is_active=True)
+    in_ledger = {li.account.pk for li in result.deductions if li.account}
+    in_ledger |= {item.account.pk for item in ledger_summary(year)["expense"] if item.account is not None}
+    expense_accounts = Account.objects.filter(type=Account.Type.EXPENSE).filter(
+        Q(is_active=True) | Q(pk__in=in_ledger)
+    )
+    if posted_adjustments is None:
+        shown = {
+            k: {"cents": format_money(v.get("cents", 0)).replace("$", ""), "note": v.get("note", "")}
+            for k, v in (ws.adjustments or {}).items()
+        }
+    else:
+        shown = posted_adjustments
     return render(
         request,
         "tax/worksheet.html",
@@ -78,14 +106,26 @@ def worksheet(request, year):
             "income_lines": services.INCOME_LINES,
             "deduction_lines": services.DEDUCTION_LINES,
             "line_labels": services.LINE_LABELS,
-            "expenses": expenses,
-            "adjust_rows": [
-                (n, label, (ws.adjustments or {}).get(str(n), {}))
-                for n, label in services.LINE_LABELS.items()
-            ],
+            "expense_accounts": expense_accounts,
+            "adjust_rows": [(n, label, shown.get(str(n), {})) for n, label in services.LINE_LABELS.items()],
             "disclaimer": services.DISCLAIMER,
         },
     )
+
+
+def _snapshot(ws):
+    fields = [
+        "association_type",
+        "total_lots",
+        "residential_lots",
+        "tax_exempt_interest_cents",
+        "no_private_benefit",
+    ]
+    data = {f: getattr(ws, f) for f in fields}
+    data.update(
+        line_map=ws.line_map, nonproperty_accounts=ws.nonproperty_accounts, adjustments=ws.adjustments
+    )
+    return data
 
 
 def _line_inputs(post):
@@ -93,7 +133,7 @@ def _line_inputs(post):
     valid_ids = set(Account.objects.values_list("pk", flat=True))
     line_map = {}
     for key, value in post.items():
-        if key.startswith("line_") and key[5:].isdigit() and is_int(value):
+        if key.startswith("line_") and is_int(key[5:]) and is_int(value):
             pk, line = int(key[5:]), int(value)
             if pk in valid_ids and line in services.LINE_LABELS:
                 line_map[str(pk)] = line
@@ -133,10 +173,12 @@ def worksheet_print(request, year):
         },
         request=request,
     )
+    audit.record(
+        request, "tax.worksheet_exported", None, {"year": year, "format": request.GET.get("format", "html")}
+    )
     if request.GET.get("format") == "pdf":
         response = HttpResponse(render_pdf(html), content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="1120-H-worksheet-{year}.pdf"'
-        audit.record(request, "tax.worksheet_exported", None, {"year": year})
         return response
     return HttpResponse(html)
 
