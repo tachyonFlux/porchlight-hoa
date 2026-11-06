@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
@@ -33,11 +34,17 @@ if not SECRET_KEY:
     else:
         raise ImproperlyConfigured("Set PORCHLIGHT_SECRET_KEY (see .env.example).")
 
-ALLOWED_HOSTS = env_list("PORCHLIGHT_ALLOWED_HOSTS", "localhost,127.0.0.1")
-CSRF_TRUSTED_ORIGINS = env_list("PORCHLIGHT_CSRF_TRUSTED_ORIGINS")
 
 # Public base URL used to build absolute links in emails and QR codes.
 BASE_URL = env("PORCHLIGHT_BASE_URL", "http://localhost:8000").rstrip("/")
+
+# The site's own address is always allowed, plus localhost for the container health check.
+_base = urlsplit(BASE_URL)
+_always = [_base.hostname or "localhost", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = list(dict.fromkeys(env_list("PORCHLIGHT_ALLOWED_HOSTS") + _always))
+CSRF_TRUSTED_ORIGINS = list(
+    dict.fromkeys(env_list("PORCHLIGHT_CSRF_TRUSTED_ORIGINS") + [f"{_base.scheme}://{_base.netloc}"])
+)
 
 # All runtime state (database, uploads, imports) lives under one directory/volume.
 DATA_DIR = Path(env("PORCHLIGHT_DATA_DIR", str(BASE_DIR / "data")))
@@ -211,6 +218,9 @@ SETUP_TOKEN_REQUIRED = not DEBUG
 # Send sign-in and claim emails from a background thread so response timing doesn't
 # reveal whether an address belongs to someone.
 EMAIL_ASYNC = env_bool("PORCHLIGHT_EMAIL_ASYNC", True)
+
+# Daily consistent copy of the SQLite database in DATA_DIR/backups (0 = off).
+BACKUP_KEEP = int(env("PORCHLIGHT_BACKUP_KEEP", "14"))
 
 # Optional read-only bank sync via SimpleFIN. Needs an encryption key for the stored
 # access URL: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

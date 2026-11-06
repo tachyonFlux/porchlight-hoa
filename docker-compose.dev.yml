@@ -1,0 +1,33 @@
+# Build Porchlight from this source tree instead of pulling the published image:
+#   docker compose -f docker-compose.dev.yml up --build
+# Uses the same .env file. For day-to-day development without Docker, see the README.
+
+x-porchlight: &porchlight
+  build: .
+  image: porchlight:dev
+  env_file: .env
+  environment:
+    PORCHLIGHT_DATA_DIR: /data
+  volumes:
+    - ./data:/data
+
+services:
+  web:
+    <<: *porchlight
+    command: web
+    ports:
+      - "${PORCHLIGHT_PORT:-8000}:8000"
+
+  scheduler:
+    <<: *porchlight
+    command: scheduler
+
+  db:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: porchlight
+      POSTGRES_USER: porchlight
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}  # required when using the postgres profile
+    volumes:
+      - ./postgres:/var/lib/postgresql/data

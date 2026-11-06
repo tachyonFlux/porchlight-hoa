@@ -1,0 +1,43 @@
+# Porchlight: run the published image.
+#   1. Copy .env.example to .env next to this file and fill it in.
+#   2. docker compose up -d        (SQLite, the default)
+#      docker compose --profile postgres up -d   (optional PostgreSQL; see .env.example)
+#
+# Everything Porchlight stores lives in ./data (database, uploads, backups).
+
+x-porchlight: &porchlight
+  # Set PORCHLIGHT_IMAGE in .env to use a specific version, e.g. ...porchlight:1.2
+  image: ${PORCHLIGHT_IMAGE:-DOCKERHUB_USERNAME/porchlight:latest}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    PORCHLIGHT_DATA_DIR: /data
+  volumes:
+    - ./data:/data
+
+services:
+  web:
+    <<: *porchlight
+    command: web
+    ports:
+      - "${PORCHLIGHT_PORT:-8000}:8000"
+
+  scheduler:
+    <<: *porchlight
+    command: scheduler
+
+  db:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: porchlight
+      POSTGRES_USER: porchlight
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}  # required when using the postgres profile
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U porchlight -d porchlight"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

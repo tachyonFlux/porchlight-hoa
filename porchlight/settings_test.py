@@ -18,3 +18,4 @@ EMAIL_ASYNC = False
 ENABLE_DJANGO_ADMIN = True
 STATIC_ROOT = DATA_DIR / "staticfiles"  # noqa: F405
 STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+BACKUP_KEEP = 0  # tests use an in-memory database

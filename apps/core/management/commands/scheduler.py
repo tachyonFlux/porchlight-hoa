@@ -5,6 +5,7 @@ import os
 import signal
 import time
 from datetime import timedelta
+from pathlib import Path
 
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections
@@ -36,6 +37,17 @@ def should_run(now, hour):
     return now - runs[0].started_at >= RETRY_AFTER
 
 
+HEARTBEAT = Path(os.environ.get("PORCHLIGHT_HEARTBEAT_FILE", "/tmp/porchlight-scheduler-heartbeat"))  # noqa: S108
+
+
+def _heartbeat():
+    """The container health check looks at this file's age."""
+    try:
+        HEARTBEAT.touch()
+    except OSError:
+        pass
+
+
 class Command(BaseCommand):
     help = "Run daily_tasks every day at PORCHLIGHT_DAILY_TASKS_HOUR (local time, default 6)."
 
@@ -62,6 +74,7 @@ class Command(BaseCommand):
             except Exception:
                 # e.g. "database is locked" during a long import; try again next minute.
                 log.exception("Scheduler check failed; will retry")
+            _heartbeat()
             for _ in range(60):  # check once a minute, but stop promptly on SIGTERM
                 if stop["flag"]:
                     break

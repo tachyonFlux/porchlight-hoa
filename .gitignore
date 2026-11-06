@@ -5,6 +5,7 @@
 
 # Runtime data: databases, uploads, imports. Never commit real HOA data.
 data/
+postgres/
 media/
 imports/
 *.sqlite3
