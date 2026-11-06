@@ -1,0 +1,7 @@
+<table><tbody>
+{% for t in r.tests %}<tr><td>{% if t.passed %}<span class="badge ok">Pass</span>{% else %}<span class="badge danger">Not met</span>{% endif %}</td>
+  <td><strong>{{ t.label }}</strong><br><small class="muted">{{ t.detail }}</small></td>
+  <td class="num">{% if t.actual_pct is not None %}{{ t.actual_pct }}%{% else %}—{% endif %}<br><small class="muted">need {{ t.required_pct|floatformat:"-2" }}%</small></td></tr>{% endfor %}
+<tr><td>{% if r.worksheet.no_private_benefit %}<span class="badge ok">Confirmed</span>{% else %}<span class="badge warn">Confirm</span>{% endif %}</td>
+  <td colspan="2"><strong>No private benefit</strong><br><small class="muted">No member profits from the association's net earnings, other than through the care of association property or a rebate of excess dues.</small></td></tr>
+</tbody></table>

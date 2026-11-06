@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Form 1120-H{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Form 1120-H worksheet</h1><a class="btn" href="{% url 'tax:rules' %}">Tax rules by year</a></div>
+{% include "finance/_nav.html" with tab="tax" %}
+<div class="callout" style="background:var(--warn-soft)"><strong>{{ disclaimer }}</strong> Porchlight fills in a draft from the tax ledger to help the treasurer and your tax preparer. It doesn't file anything.</div>
+<p>Most HOAs can choose each year to file Form 1120-H, which taxes only income that isn't from members' dues and assessments (for example bank interest), at a flat rate. The worksheet checks the qualification tests and adds up the lines.</p>
+<div class="card"><ul class="list">{% for y, due, ws in years %}
+  <li class="row"><span class="grow"><a href="{% url 'tax:worksheet' y %}"><strong>Tax year {{ y }}</strong></a><br><small class="muted">Due {{ due|date:"F j, Y" }}{% if ws %} · worksheet saved {{ ws.updated_at|date:"M j, Y" }}{% endif %}</small></span></li>
+{% empty %}<li class="muted">No bank transactions yet. <a href="{% url 'tax:worksheet' default_year %}">Open the {{ default_year }} worksheet anyway</a>.</li>{% endfor %}</ul></div>
+{% endblock %}

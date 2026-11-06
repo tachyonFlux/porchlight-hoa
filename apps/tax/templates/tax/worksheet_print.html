@@ -1,0 +1,31 @@
+<!doctype html>
+{% load porchlight %}
+<html lang="en"><head><meta charset="utf-8"><title>{{ hoa.display_name }} Form 1120-H worksheet {{ r.year }}</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1f2a36; font-size: 10pt; margin: 1rem; }
+  h1 { font-size: 15pt; margin: 0; } h2 { font-size: 12pt; margin: 1.2rem 0 .4rem; }
+  .muted { color: #5d6875; } .warn { border: 2px solid #a33; color: #a33; padding: .4rem .6rem; font-weight: 700; margin: .6rem 0; }
+  table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .25rem .3rem; border-bottom: 1px solid #e3dccf; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .badge { font-weight: 700; } .badge.ok { color: #2b6b3f; } .badge.danger, .badge.warn { color: #a33; }
+  @page { size: letter; margin: .6in; @top-center { content: "{{ disclaimer }}"; font-size: 8pt; color: #a33; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #5d6875; } }
+</style></head><body>
+<h1>{{ hoa.display_name }}: Form 1120-H worksheet, tax year {{ r.year }}</h1>
+<div class="warn">{{ disclaimer }}</div>
+<p class="muted">Generated {{ generated|date:"F j, Y" }} from the association's bank-transaction ledger (cash basis). Due {{ r.due|date:"F j, Y" }} for a calendar tax year.
+{% if r.config %}Rules used: {{ r.config.year }}{% if r.config.source %}. Source: {{ r.config.source }}{% endif %}{% endif %}</p>
+{% for w in r.warnings %}<p style="color:#a33">{{ w }}</p>{% endfor %}
+<p>Association type: {{ r.worksheet.get_association_type_display }}. Tax-exempt interest (item E): {{ r.worksheet.tax_exempt_interest_cents|money }}.</p>
+<h2>Qualification tests</h2>
+{% include "tax/_tests.html" %}
+<h2>Form lines</h2>
+{% include "tax/_lines_table.html" %}
+<h2>Detail</h2>
+<table><thead><tr><th>Category</th><th>Treated as</th><th class="num">Amount</th></tr></thead><tbody>
+  {% for i in r.exempt_income %}<tr><td>{{ i.account.code }} {{ i.account.name }}</td><td>Exempt function income</td><td class="num">{{ i.net_cents|money }}</td></tr>{% endfor %}
+  {% for li in r.nonexempt_income %}<tr><td>{% if li.account %}{{ li.account.code }} {{ li.account.name }}{% else %}Adjustment: {{ li.note }}{% endif %}</td><td>Line {{ li.line }}</td><td class="num">{{ li.cents|money }}</td></tr>{% endfor %}
+  {% for li in r.deductions %}<tr><td>{% if li.account %}{{ li.account.code }} {{ li.account.name }}{% else %}Adjustment: {{ li.note }}{% endif %}</td><td>Line {{ li.line }}</td><td class="num">{{ li.cents|money }}</td></tr>{% endfor %}
+  <tr><td colspan="2">Total spending / on association property</td><td class="num">{{ r.total_expenses_cents|money }} / {{ r.property_expenses_cents|money }}</td></tr>
+</tbody></table>
+{% if r.worksheet.notes %}<h2>Notes</h2><p>{{ r.worksheet.notes|linebreaksbr }}</p>{% endif %}
+</body></html>

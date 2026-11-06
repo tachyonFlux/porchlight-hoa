@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}1120-H rules{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Form 1120-H rules by tax year</h1>{% if can_edit %}<a class="btn primary" href="{% url 'tax:rule_create' %}">Add a tax year</a>{% endif %}</div>
+<p class="muted">The worksheet uses these numbers. They've been the same for many years, but check each new year's <a href="https://www.irs.gov/instructions/i1120h" rel="noopener noreferrer" target="_blank">IRS instructions for Form 1120-H</a> before relying on them.</p>
+<div class="card table-wrap"><table><thead><tr><th>Year</th><th class="num">Gross income</th><th class="num">Expenditure</th><th class="num">Residential</th><th class="num">Specific deduction</th><th class="num">Rate</th><th>Checked</th></tr></thead><tbody>
+{% for c in configs %}<tr><td>{% if can_edit %}<a href="{% url 'tax:rule_edit' c.pk %}">{{ c.year }}</a>{% else %}{{ c.year }}{% endif %}</td>
+  <td class="num">{{ c.gross_income_test_pct|floatformat:"-2" }}%</td><td class="num">{{ c.expenditure_test_pct|floatformat:"-2" }}%</td><td class="num">{{ c.residential_test_pct|floatformat:"-2" }}%</td>
+  <td class="num">{{ c.specific_deduction_cents|money }}</td><td class="num">{{ c.tax_rate_pct|floatformat:"-2" }}% / {{ c.timeshare_tax_rate_pct|floatformat:"-2" }}%</td>
+  <td><small>{% if c.verified_on %}{{ c.verified_on|date:"M j, Y" }}{% if c.verified_by %} by {{ c.verified_by }}{% endif %}{% else %}<span class="muted">not checked</span>{% endif %}<br><span class="muted">{{ c.source }}</span></small></td></tr>
+{% empty %}<tr><td colspan="7" class="empty">No years entered.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

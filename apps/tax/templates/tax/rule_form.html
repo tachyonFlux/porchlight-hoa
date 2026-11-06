@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card"><h1>{{ title }}</h1>
+  <p class="muted">Copy the numbers from that year's <a href="https://www.irs.gov/instructions/i1120h" rel="noopener noreferrer" target="_blank">IRS instructions for Form 1120-H</a>. The residential use test comes from Treasury Regulation 1.528-4.</p>
+  <form method="post">{% csrf_token %}{% include "partials/form.html" %}
+    <div class="actions"><button class="primary" type="submit">Save</button><a class="btn" href="{{ back }}">Cancel</a></div></form></div>
+{% endblock %}

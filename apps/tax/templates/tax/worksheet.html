@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}1120-H worksheet {{ r.year }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Form 1120-H worksheet, {{ r.year }}</h1>
+  <div class="actions"><a class="btn" target="_blank" href="{% url 'tax:worksheet_print' r.year %}">Print</a><a class="btn" href="{% url 'tax:worksheet_print' r.year %}?format=pdf">PDF for the preparer</a></div></div>
+{% include "finance/_nav.html" with tab="tax" %}
+<div class="callout" style="background:var(--warn-soft)"><strong>{{ disclaimer }}</strong> Due {{ r.due|date:"F j, Y" }} for a calendar tax year (a weekend or holiday moves it). An extension (Form 7004) doesn't extend the time to pay.</div>
+{% for w in r.warnings %}<div class="callout" style="background:var(--danger-soft)">{{ w }}</div>{% endfor %}
+
+<div class="grid two">
+  <div class="card"><h2>Does the association qualify?</h2>{% include "tax/_tests.html" %}
+    <p>{% if r.qualifies %}<span class="badge ok">All tests met</span> The association can elect to file Form 1120-H for {{ r.year }}.{% else %}<span class="badge warn">Not all tests met</span> Talk to your tax preparer; the association may need to file Form 1120 instead.{% endif %}</p></div>
+  <div class="card table-wrap"><h2>Form lines</h2>{% include "tax/_lines_table.html" %}</div>
+</div>
+
+<div class="card table-wrap"><h2>Where the numbers come from</h2>
+  <p class="muted">Calendar year {{ r.year }} from the <a href="{% url 'finance:ledger' %}?year={{ r.year }}">tax ledger</a>. Each category's tax class is set under <a href="{% url 'finance:chart' %}">Finances → Categories</a>.</p>
+  <table><thead><tr><th>Category</th><th>Treated as</th><th class="num">Amount</th></tr></thead><tbody>
+  {% for i in r.exempt_income %}<tr><td>{{ i.account.code }} {{ i.account.name }}</td><td>Exempt function income (not taxed)</td><td class="num">{{ i.net_cents|money }}</td></tr>{% endfor %}
+  {% for li in r.nonexempt_income %}<tr><td>{% if li.account %}{{ li.account.code }} {{ li.account.name }}{% else %}Adjustment: {{ li.note|default:"(no note)" }}{% endif %}</td><td>Line {{ li.line }}: {{ line_labels|get_item:li.line }}</td><td class="num">{{ li.cents|money }}</td></tr>{% endfor %}
+  {% for li in r.deductions %}<tr><td>{% if li.account %}{{ li.account.code }} {{ li.account.name }}{% else %}Adjustment: {{ li.note|default:"(no note)" }}{% endif %}</td><td>Line {{ li.line }}: {{ line_labels|get_item:li.line }}</td><td class="num">{{ li.cents|money }}</td></tr>{% endfor %}
+  <tr><td colspan="2">Total spending (for the 90% test)</td><td class="num">{{ r.total_expenses_cents|money }}</td></tr>
+  <tr><td colspan="2">… of which on association property</td><td class="num">{{ r.property_expenses_cents|money }}</td></tr>
+  </tbody></table>
+</div>
+
+{% if can_edit %}
+<form method="post">{% csrf_token %}
+<div class="card"><h2>Association details</h2>{% include "partials/form.html" %}</div>
+
+<div class="card table-wrap"><h2>Form line for each taxable category</h2>
+  <table><tbody>
+  {% for li in r.nonexempt_income %}{% if li.account %}<tr><td>{{ li.account.code }} {{ li.account.name }}</td><td><select name="line_{{ li.account.pk }}">{% for n, label in income_lines.items %}<option value="{{ n }}" {% if n == li.line %}selected{% endif %}>{{ n }}. {{ label }}</option>{% endfor %}</select></td></tr>{% endif %}{% endfor %}
+  {% for li in r.deductions %}{% if li.account %}<tr><td>{{ li.account.code }} {{ li.account.name }}</td><td><select name="line_{{ li.account.pk }}">{% for n, label in deduction_lines.items %}<option value="{{ n }}" {% if n == li.line %}selected{% endif %}>{{ n }}. {{ label }}</option>{% endfor %}</select></td></tr>{% endif %}{% endfor %}
+  {% if not r.nonexempt_income and not r.deductions %}<tr><td class="muted">No taxable income or directly connected expenses in {{ r.year }}.</td></tr>{% endif %}
+  </tbody></table>
+  <p class="muted"><small>Only expense categories tagged "directly tied to non-exempt income" are deductions; most HOA expenses aren't.</small></p></div>
+
+<div class="card"><h2>Spending that isn't for association property</h2>
+  <p class="muted">For the 90% test, tick a category only if its spending wasn't for acquiring, building, managing, maintaining or caring for association property (for example social events).</p>
+  <div class="actions">{% for a in expenses %}<label style="font-weight:normal"><input type="checkbox" name="nonproperty" value="{{ a.pk }}" {% if a.pk in ws.nonproperty_accounts %}checked{% endif %}>{{ a.name }}</label>{% endfor %}</div></div>
+
+<div class="card table-wrap"><h2>Adjustments</h2>
+  <p class="muted">Amounts the bank ledger doesn't show, such as capital gains (Schedule D), depreciation, or a correction your preparer asks for. Use a negative number to reduce a line.</p>
+  <table><thead><tr><th>Line</th><th>Amount ($)</th><th>Note</th></tr></thead><tbody>
+  {% for n, label, adj in adjust_rows %}<tr><td><small>{{ n }}. {{ label }}</small></td>
+    <td><input name="adj_{{ n }}_cents" value="{% if adj.cents %}{{ adj.cents|money }}{% endif %}" inputmode="decimal" style="width:8rem;padding:.3rem"></td>
+    <td><input name="adj_{{ n }}_note" value="{{ adj.note }}" maxlength="200" style="padding:.3rem"></td></tr>{% endfor %}
+  </tbody></table></div>
+<div class="actions"><button class="primary" type="submit">Save worksheet</button></div>
+</form>
+{% endif %}
+{% endblock %}
