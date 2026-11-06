@@ -1,0 +1,19 @@
+{% load porchlight %}{% with d=r.dues %}
+{% if d %}
+<div class="grid three">
+  {% if d.periods_per_year > 1 %}<div class="stat"><span class="num">{{ d.per_period_cents|money }}</span><span class="label">per home, each of {{ d.periods_per_year }} billing periods</span></div>{% endif %}
+  <div class="stat"><span class="num">{{ d.annual_cents|money }}</span><span class="label">per home per year</span></div>
+  <div class="stat"><span class="num" {% if d.over_cap %}style="color:var(--danger)"{% endif %}>{{ d.change_cents|money_signed }}</span><span class="label">vs current {{ d.current_annual_cents|money }}/yr{% if d.change_pct is not None %} ({% if d.change_pct > 0 %}+{% endif %}{{ d.change_pct }}%){% endif %}</span></div>
+</div>
+{% if d.over_cap %}<p class="callout" style="background:var(--danger-soft)">Over the {{ d.cap_pct|floatformat:"-2" }}% yearly cap. Capped dues would be {{ d.capped_per_period_cents|money }} per period ({{ d.capped_annual_cents|money }}/yr), about {{ d.capped_shortfall_cents|money }} short for the year.</p>{% endif %}
+<table style="margin-top:1rem"><tbody>
+  <tr><td>Operating expenses</td><td class="num">{{ d.opex_cents|money }}</td></tr>
+  <tr><td>+ Reserve contribution</td><td class="num">{{ d.reserve_cents|money }}</td></tr>
+  <tr><td>+ Contingency ({{ r.scenario.contingency_pct|floatformat:"-2" }}% of expenses)</td><td class="num">{{ d.contingency_cents|money }}</td></tr>
+  <tr><td>− Other income</td><td class="num">{{ d.other_income_cents|money }}</td></tr>
+  <tr><td><strong>Dues must bring in</strong></td><td class="num"><strong>{{ d.net_needed_cents|money }}</strong></td></tr>
+  <tr><td>÷ {{ r.scenario.collection_rate_pct|floatformat:"-2" }}% expected collection = to bill</td><td class="num">{{ d.gross_needed_cents|money }}</td></tr>
+  <tr><td>÷ {{ d.homes }} home{{ d.homes|pluralize }}{% if d.periods_per_year > 1 %} ÷ {{ d.periods_per_year }} periods{% endif %}, rounded up</td><td class="num">{{ d.per_period_cents|money }}</td></tr>
+</tbody></table>
+{% else %}<p style="color:var(--danger)">{{ r.dues_error }}</p>{% endif %}
+{% endwith %}

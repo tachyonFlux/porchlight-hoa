@@ -10,6 +10,7 @@
   {% if mobile %}<span class="nav-label">Board</span>{% else %}<details class="nav-dropdown"><summary {% if '/board/' in p %}class="active"{% endif %}>Board{% if board_unread %} <span class="badge accent">{{ board_unread }}</span>{% endif %}</summary><div class="nav-dropdown-menu">{% endif %}
   <a href="{% url 'messaging:board_room' %}" {% if '/board/room' in p %}class="active"{% endif %}>Board Room{% if board_unread and mobile %} <span class="badge accent">{{ board_unread }}</span>{% endif %}</a>
   <a href="{% url 'finance:overview' %}" {% if '/board/finance' in p %}class="active"{% endif %}>Finances</a>
+  <a href="{% url 'budget:home' %}" {% if '/board/budget' in p %}class="active"{% endif %}>Budget</a>
   <a href="{% url 'dues:overview' %}" {% if '/board/dues' in p %}class="active"{% endif %}>Treasurer</a>
   <a href="{% url 'compliance:list' %}" {% if '/board/compliance' in p %}class="active"{% endif %}>Compliance</a>
   <a href="{% url 'documents:share_list' %}" {% if '/board/share-links' in p %}class="active"{% endif %}>Share links</a>

@@ -1,0 +1,4 @@
+{% load porchlight %}<tr><td>{{ row.account.code }} {{ row.account.name }}</td>
+{% for y, cents, url in row.cells %}<td class="num">{% if cents %}<a href="{{ url }}">{{ cents|money }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>{% endfor %}
+<td class="num">{% if row.change is not None %}{% if row.change > 0 %}+{% endif %}{{ row.change }}%{% else %}<span class="muted">—</span>{% endif %}</td>
+<td class="num">{% if row.average is not None %}{{ row.average|money }}{% endif %}</td></tr>

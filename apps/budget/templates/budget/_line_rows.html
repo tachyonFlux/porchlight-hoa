@@ -1,0 +1,8 @@
+{% load porchlight %}{% for l in lines %}<tr>
+  <td>{{ l.account.code }} {{ l.account.name }}</td>
+  {% for y in r.history_years %}<td class="num"><small>{{ l.history|get_item:y|money }}</small></td>{% endfor %}
+  <td><select name="method_{{ l.line.pk }}" style="min-width:11rem;padding:.3rem .4rem">{% for v, label in methods %}<option value="{{ v }}" {% if l.line.method == v %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td><input name="years_{{ l.line.pk }}" value="{{ l.line.years }}" inputmode="numeric" style="width:3.5rem;padding:.3rem" title="Years for average/trend"></td>
+  <td><input name="manual_{{ l.line.pk }}" value="{% if l.line.manual_cents is not None %}{{ l.line.manual_cents|money }}{% endif %}" inputmode="decimal" style="width:7rem;padding:.3rem" placeholder="$"></td>
+  <td class="num"><strong>{{ l.budget_cents|money }}</strong>{% if l.change_pct is not None %}<br><small class="muted">{% if l.change_pct > 0 %}+{% endif %}{{ l.change_pct }}%</small>{% endif %}</td>
+</tr>{% endfor %}

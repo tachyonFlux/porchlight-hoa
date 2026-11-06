@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Adopt budget{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card"><h1>Adopt {{ s.fiscal_year }}: {{ s.name }}?</h1>
+{% if r.dues %}
+<p>This makes it the {{ s.fiscal_year }} budget and changes the dues setting from <strong>{{ settings.amount_cents|money }}</strong> to <strong>{{ r.dues.per_period_cents|money }}</strong> per home per billing period.</p>
+{% if r.dues.over_cap %}<p class="callout" style="background:var(--danger-soft)">This is a {{ r.dues.change_pct }}% increase, over the {{ r.dues.cap_pct|floatformat:"-2" }}% yearly cap. Check your covenants before adopting it.</p>{% endif %}
+<p class="muted">Adopting doesn't bill anyone. Billing periods already created keep the amount they were created with{% if existing_periods %}:{% else %}.{% endif %}</p>
+{% if existing_periods %}<ul>{% for p in existing_periods %}<li>{{ p.label }}: {{ p.amount_cents|money }}</li>{% endfor %}</ul>{% endif %}
+<p class="muted">Only adopt a budget the board has approved, following your bylaws (some require a meeting or member notice first).</p>
+<form method="post">{% csrf_token %}<div class="actions"><button class="primary" type="submit">Adopt and update dues</button><a class="btn" href="{% url 'budget:scenario' s.pk %}">Cancel</a></div></form>
+{% else %}<p style="color:var(--danger)">{{ r.dues_error }}</p><a class="btn" href="{% url 'budget:scenario' s.pk %}">Back</a>{% endif %}
+</div>
+{% endblock %}

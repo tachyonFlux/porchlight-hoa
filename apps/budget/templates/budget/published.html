@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}{{ b.fiscal_year }} budget{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ b.fiscal_year }} budget</h1>
+  <div class="actions"><a class="btn" target="_blank" href="?format=print">Print</a><a class="btn" href="?format=pdf">PDF</a></div></div>
+<div class="grid three">
+  <div class="card stat"><span class="num">{{ b.per_period_cents|money }}</span><span class="label">dues per home{% if b.periods_per_year > 1 %}, each of {{ b.periods_per_year }} billing periods{% else %} for the year{% endif %}</span></div>
+  <div class="card stat"><span class="num">{{ b.opex_cents|money }}</span><span class="label">operating expenses</span></div>
+  <div class="card stat"><span class="num">{{ b.reserve_contribution_cents|money }}</span><span class="label">saved for future repairs</span></div>
+</div>
+<div class="card table-wrap" style="margin-top:1rem"><table><thead><tr><th>Category</th><th class="num">{{ b.base_year }} actual</th><th class="num">{{ b.fiscal_year }} budget</th></tr></thead><tbody>
+  <tr><th colspan="3">Income other than dues</th></tr>
+  {% for l in b.income %}<tr><td>{{ l.name }}</td><td class="num">{% if l.last is not None %}{{ l.last|money }}{% endif %}</td><td class="num">{{ l.cents|money }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">None</td></tr>{% endfor %}
+  <tr><th colspan="3">Expenses</th></tr>
+  {% for l in b.expense %}<tr><td>{{ l.name }}</td><td class="num">{% if l.last is not None %}{{ l.last|money }}{% endif %}</td><td class="num">{{ l.cents|money }}</td></tr>{% endfor %}
+  {% for i in b.one_time %}{% if not i.reserve %}<tr><td>{{ i.description }} (one-time{% if i.income %} income{% endif %})</td><td></td><td class="num">{{ i.cents|money }}</td></tr>{% endif %}{% endfor %}
+  <tr><td>Contribution to reserves</td><td></td><td class="num">{{ b.reserve_contribution_cents|money }}</td></tr>
+  <tr><td>Contingency</td><td></td><td class="num">{{ b.contingency_cents|money }}</td></tr>
+</tbody></table></div>
+<p class="muted"><small>Published by the board {{ s.published_at|date:"F j, Y" }}.</small></p>
+{% endblock %}

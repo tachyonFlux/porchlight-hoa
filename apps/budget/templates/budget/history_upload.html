@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Import past years{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card"><h1>Import past years</h1>
+<p>Upload a spreadsheet saved as CSV with one row per amount, for example:</p>
+<pre class="code-box">Year,Category,Amount,Description
+2024,Landscaping,10800,Greenscape contract
+2024,Insurance,4200,
+2025,Landscaping,11200,Greenscape contract</pre>
+<p class="muted">Next you'll choose which columns are which and match your spreadsheet's categories to Porchlight's. Re-importing the same layout later reuses those choices.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}{% include "partials/form.html" %}
+<div class="actions"><button class="primary" type="submit">Continue</button><a class="btn" href="{% url 'budget:history' %}">Cancel</a></div></form></div>
+{% endblock %}

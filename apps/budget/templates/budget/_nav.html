@@ -1,0 +1,7 @@
+<div class="actions no-print" style="margin-bottom:1rem">
+  <a class="btn small {% if tab == 'home' %}primary{% endif %}" href="{% url 'budget:home' %}">Scenarios</a>
+  <a class="btn small {% if tab == 'lookback' %}primary{% endif %}" href="{% url 'budget:lookback' %}">Look back</a>
+  <a class="btn small {% if tab == 'compare' %}primary{% endif %}" href="{% url 'budget:compare' %}">Compare</a>
+  <a class="btn small {% if tab == 'reserves' %}primary{% endif %}" href="{% url 'budget:reserves' %}">Reserves</a>
+  <a class="btn small {% if tab == 'history' %}primary{% endif %}" href="{% url 'budget:history' %}">Past years</a>
+</div>

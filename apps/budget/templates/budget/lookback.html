@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Look back{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Look back</h1></div>
+{% include "budget/_nav.html" with tab="lookback" %}
+{% if not years %}
+<div class="card empty">No actuals yet. Import bank transactions under Finances, or <a href="{% url 'budget:history_upload' %}">import a spreadsheet of past years</a>.</div>
+{% else %}
+<p class="muted">Income and spending by category and year. Click an amount to see what's behind it.
+  {% if partial_year %}{{ partial_year }} isn't over yet.{% endif %}</p>
+<div class="card table-wrap"><table>
+<thead><tr><th>Category</th>{% for y in years %}<th class="num">{{ y }}{% if y == partial_year %}*{% endif %}<br><small class="muted">{% if sources|get_item:y == 'spreadsheet' %}spreadsheet{% else %}bank{% endif %}</small></th>{% endfor %}
+  <th class="num">{% if change_years|length == 2 %}{{ change_years.0 }}→{{ change_years.1 }}{% else %}Change{% endif %}</th><th class="num">Average<br><small class="muted">{{ complete_count }} full yr{{ complete_count|pluralize }}</small></th></tr></thead>
+<tbody>
+<tr><th colspan="{{ years|length|add:3 }}">Income</th></tr>
+{% for row in rows.income %}{% include "budget/_lookback_row.html" %}{% endfor %}
+<tr><td><strong>Total income</strong></td>{% for t in totals.income %}<td class="num"><strong>{{ t|money }}</strong></td>{% endfor %}<td></td><td></td></tr>
+<tr><th colspan="{{ years|length|add:3 }}">Spending</th></tr>
+{% for row in rows.expense %}{% include "budget/_lookback_row.html" %}{% endfor %}
+<tr><td><strong>Total spending</strong></td>{% for t in totals.expense %}<td class="num"><strong>{{ t|money }}</strong></td>{% endfor %}<td></td><td></td></tr>
+<tr><td><strong>Income minus spending</strong></td>{% for t in net %}<td class="num"><strong>{{ t|money }}</strong></td>{% endfor %}<td></td><td></td></tr>
+</tbody></table></div>
+<p class="muted"><small>Transfers between the HOA's own accounts and uncategorized transactions aren't included. A year imported from a spreadsheet uses the spreadsheet instead of bank transactions.</small></p>
+{% endif %}
+{% endblock %}

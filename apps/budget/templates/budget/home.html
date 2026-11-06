@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Budget{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Budget planning</h1>
+  <a class="btn primary" href="{% url 'budget:scenario_create' %}">New scenario</a></div>
+{% include "budget/_nav.html" with tab="home" %}
+{% if not imports and not groups %}
+<div class="callout">
+  <strong>Getting started:</strong> budgets are projected from past years. Bank transactions you've imported under
+  Finances count automatically; for years before that, <a href="{% url 'budget:history_upload' %}">import a spreadsheet of past years</a>.
+  Then add your <a href="{% url 'budget:reserves' %}">reserve components</a> and create a scenario.
+</div>
+{% endif %}
+{% for year, scenarios in groups %}
+<div class="card"><h2>{{ year }} budget</h2>
+  <ul class="list">{% for s in scenarios %}
+    <li class="row"><span class="grow"><a href="{% url 'budget:scenario' s.pk %}"><strong>{{ s.name }}</strong></a>
+      {% if s.is_adopted %}<span class="badge ok">Adopted</span>{% endif %}{% if s.is_published %} <span class="badge accent">Published</span>{% endif %}<br>
+      <small class="muted">Updated {{ s.updated_at|date:"M j, Y" }}</small></span>
+      <a class="btn small" href="{% url 'budget:scenario_create' %}?copy={{ s.pk }}">Copy</a></li>
+  {% endfor %}</ul>
+  {% if scenarios|length > 1 %}<a class="btn small" href="{% url 'budget:compare' %}?year={{ year }}">Compare side by side</a>{% endif %}
+</div>
+{% empty %}
+<div class="card empty">No budget scenarios yet.</div>
+{% endfor %}
+<p class="muted"><small>{{ components }} active reserve component{{ components|pluralize }} · {{ imports }} spreadsheet import{{ imports|pluralize }}</small></p>
+{% endblock %}

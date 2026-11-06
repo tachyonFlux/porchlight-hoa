@@ -1,0 +1,45 @@
+<!doctype html>
+{% load porchlight %}
+<html lang="en"><head><meta charset="utf-8"><title>{{ hoa.display_name }} {{ b.fiscal_year }} budget</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1f2a36; font-size: 10pt; margin: 1rem; }
+  h1 { font-size: 15pt; margin: 0; } h2 { font-size: 12pt; margin: 1.2rem 0 .4rem; }
+  .muted { color: #5d6875; } .draft { color: #a33; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .25rem .3rem; border-bottom: 1px solid #e3dccf; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .total td { font-weight: 700; }
+  @page { size: letter; margin: .6in; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #5d6875; } }
+</style></head><body>
+<h1>{{ hoa.display_name }}: {{ b.fiscal_year }} budget</h1>
+<p class="muted">{% if draft %}<span class="draft">DRAFT ({{ b.name }}), not adopted.</span> {% endif %}Generated {{ generated|date:"F j, Y" }}. Projected from {{ b.base_year }} actuals.</p>
+
+<h2>Dues</h2>
+<table><tbody>
+  <tr><td>Dues per home{% if b.periods_per_year > 1 %}, each of {{ b.periods_per_year }} billing periods{% endif %}</td><td class="num"><strong>{{ b.per_period_cents|money }}</strong></td></tr>
+  <tr><td>Per home per year</td><td class="num">{{ b.annual_cents|money }}</td></tr>
+  {% if b.current_annual_cents %}<tr><td>Change from {{ b.current_annual_cents|money }} a year</td><td class="num">{{ b.change_cents|money_signed }}{% if b.change_pct %} ({{ b.change_pct }}%){% endif %}</td></tr>{% endif %}
+  <tr><td>Homes</td><td class="num">{{ b.homes }}</td></tr>
+</tbody></table>
+
+<h2>Budget</h2>
+<table><thead><tr><th>Category</th><th class="num">{{ b.base_year }} actual</th><th class="num">{{ b.fiscal_year }} budget</th></tr></thead><tbody>
+  <tr><th colspan="3">Income other than dues</th></tr>
+  {% for l in b.income %}<tr><td>{{ l.name }}</td><td class="num">{% if l.last is not None %}{{ l.last|money }}{% endif %}</td><td class="num">{{ l.cents|money }}</td></tr>{% endfor %}
+  {% for i in b.one_time %}{% if i.income and not i.reserve %}<tr><td>{{ i.description }} (one-time)</td><td></td><td class="num">{{ i.cents|money }}</td></tr>{% endif %}{% endfor %}
+  <tr class="total"><td>Other income</td><td></td><td class="num">{{ b.other_income_cents|money }}</td></tr>
+  <tr><th colspan="3">Operating expenses</th></tr>
+  {% for l in b.expense %}<tr><td>{{ l.name }}</td><td class="num">{% if l.last is not None %}{{ l.last|money }}{% endif %}</td><td class="num">{{ l.cents|money }}</td></tr>{% endfor %}
+  {% for i in b.one_time %}{% if not i.income and not i.reserve %}<tr><td>{{ i.description }} (one-time)</td><td></td><td class="num">{{ i.cents|money }}</td></tr>{% endif %}{% endfor %}
+  <tr class="total"><td>Operating expenses</td><td></td><td class="num">{{ b.opex_cents|money }}</td></tr>
+  <tr><td>Contribution to reserves</td><td></td><td class="num">{{ b.reserve_contribution_cents|money }}</td></tr>
+  <tr><td>Contingency ({{ b.contingency_pct|floatformat:"-2" }}% of expenses)</td><td></td><td class="num">{{ b.contingency_cents|money }}</td></tr>
+  <tr><td class="muted" colspan="3">Dues are set assuming {{ b.collection_rate_pct|floatformat:"-2" }}% of billed dues are collected.</td></tr>
+</tbody></table>
+
+<h2>Reserve fund</h2>
+<p>Balance at the start of {{ b.fiscal_year }}: {{ b.reserve_start_cents|money }}{% if b.percent_funded %} ({{ b.percent_funded }}% of the fully funded target of {{ b.fully_funded_cents|money }}){% endif %}.</p>
+<table><thead><tr><th>Year</th><th class="num">Contribution</th><th>Planned replacements</th><th class="num">Spending</th><th class="num">Year-end balance</th></tr></thead><tbody>
+  {% for y in b.reserve %}<tr><td>{{ y.year }}</td><td class="num">{{ y.contribution|money }}</td><td>{{ y.items|join:", " }}</td><td class="num">{{ y.spending|money }}</td><td class="num">{{ y.end|money }}</td></tr>{% endfor %}
+</tbody></table>
+{% if b.notes %}<h2>Notes</h2><p>{{ b.notes|linebreaksbr }}</p>{% endif %}
+</body></html>

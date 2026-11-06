@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Reserves{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Reserve components</h1><a class="btn primary" href="{% url 'budget:component_create' %}">Add a component</a></div>
+{% include "budget/_nav.html" with tab="reserves" %}
+<p class="muted">Things the reserve fund will pay to replace. "Should have saved" is the used-up share of each replacement cost in {{ year }} (cost × years used ÷ useful life); compare its total with your reserve balance on a scenario's page.</p>
+<div class="card table-wrap"><table><thead><tr><th>Component</th><th class="num">Cost</th><th class="num">Useful life</th><th class="num">Replace in</th><th class="num">Should have saved</th><th class="num">Straight-line / yr</th><th class="num">Planned / yr</th></tr></thead><tbody>
+{% for r in rows %}<tr{% if not r.c.is_active %} class="muted"{% endif %}><td><a href="{% url 'budget:component_edit' r.c.pk %}">{{ r.c.name }}</a>{% if not r.c.is_active %} <small>(inactive)</small>{% endif %}<br><small class="muted">{{ r.c.remaining_life_years }} yr{{ r.c.remaining_life_years|pluralize }} left as of {{ r.c.as_of_year }}</small></td>
+  <td class="num">{{ r.c.replacement_cost_cents|money }}</td><td class="num">{{ r.c.useful_life_years }} yrs</td><td class="num">{{ r.replacement_year }}</td>
+  <td class="num">{{ r.fully_funded|money }}</td><td class="num">{{ r.straight_line|money }}</td><td class="num">{{ r.contribution|money }}{% if not r.c.annual_contribution_cents %}<br><small class="muted">straight-line</small>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="7" class="empty">No components yet. Start with the big items: fences, entrance signs, retaining walls, common-area paving, stormwater facilities.</td></tr>{% endfor %}
+{% if rows %}<tr><td><strong>Total (active)</strong></td><td class="num"><strong>{{ total_cost|money }}</strong></td><td></td><td></td><td class="num"><strong>{{ total_fully_funded|money }}</strong></td><td class="num"><strong>{{ total_straight_line|money }}</strong></td><td class="num"><strong>{{ total_contribution|money }}</strong></td></tr>{% endif %}
+</tbody></table></div>
+<p class="muted"><small>This is a simple straight-line plan, not a professional reserve study. If your HOA has one, enter its components and numbers here.</small></p>
+{% endblock %}

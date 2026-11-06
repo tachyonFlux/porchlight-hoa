@@ -149,6 +149,7 @@ class Command(BaseCommand):
         self._seed_community_life(admin, created_homes)
         self._seed_compliance_and_documents(admin)
         self._seed_finance(rng, admin)
+        self._seed_budget(admin)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -406,3 +407,79 @@ class Command(BaseCommand):
         rows = [r for r in rows if r.date <= today]
         assign_dedupe_keys(rows)
         finance.import_rows(rows, bank, "csv", "demo-bank-export.csv", admin)
+
+    def _seed_budget(self, admin):
+        """Three past years from a 'spreadsheet', some reserve components and two scenarios."""
+        from django.utils import timezone
+
+        from apps.budget import services as budget
+        from apps.budget.forms import ScenarioForm
+        from apps.budget.models import HistoricalAmount, HistoricalImport, ReserveComponent
+        from apps.finance.models import Account
+
+        this_year = timezone.localdate().year
+        acct = {a.code: a for a in Account.objects.all()}
+        batch = HistoricalImport.objects.create(
+            filename="demo-past-years.csv", sha256="demo", created_by=admin
+        )
+        yearly = {
+            "4000": 4200000,
+            "4100": 1500,
+            "5000": 1020000,
+            "5100": 150000,
+            "5200": 400000,
+            "5300": 180000,
+            "5400": 90000,
+            "5500": 45000,
+            "5700": 120000,
+            "5900": 3600,
+        }
+        # Scale the made-up books to this neighborhood: spending is about 85% of what dues bring in.
+        from apps.community.models import Home
+        from apps.dues.models import DuesSettings
+
+        dues_total = DuesSettings.load().annual_amount_cents * Home.objects.filter(is_active=True).count()
+        spending = sum(v for k, v in yearly.items() if k.startswith("5"))
+        scale = (dues_total * 0.85 / spending) if dues_total else 1
+        yearly = {k: (dues_total if k == "4000" else int(v * scale)) for k, v in yearly.items()}
+        for back, growth in ((3, 0.94), (2, 0.97), (1, 1.0)):
+            for code, cents in yearly.items():
+                HistoricalAmount.objects.create(
+                    batch=batch, year=this_year - back, account=acct[code], amount_cents=int(cents * growth)
+                )
+        batch.rows = batch.amounts.count()
+        batch.save()
+        for name, cost, life, left in (
+            ("Entrance sign", 600000, 20, 6),
+            ("Common-area fence", 1200000, 25, 11),
+            ("Stormwater pond maintenance", 900000, 15, 3),
+            ("Path repaving", 1500000, 20, 14),
+        ):
+            ReserveComponent.objects.create(
+                name=name,
+                replacement_cost_cents=cost,
+                useful_life_years=life,
+                remaining_life_years=left,
+                as_of_year=this_year,
+            )
+        base = {
+            "fiscal_year": this_year + 1,
+            "base_year": this_year - 1,
+            "inflation_pct": "3",
+            "contingency_pct": "5",
+            "collection_rate_pct": "97",
+            "projection_years": 5,
+            "future_increase_pct": "3",
+            "starting_operating_cents": "6000",
+            "min_operating_balance_cents": "3000",
+            "starting_reserve_cents": "15000",
+            "round_to_dollar": "on",
+            "increase_cap_pct": "10",
+        }
+        for name, extra in (
+            ("Proposed", {}),
+            ("Hold the line", {"inflation_pct": "0", "reserve_contribution_cents": "2000"}),
+        ):
+            form = ScenarioForm(base | {"name": name} | extra)
+            if form.is_valid():
+                budget.create_scenario(form, admin)

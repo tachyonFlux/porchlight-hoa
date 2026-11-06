@@ -15,6 +15,7 @@ urlpatterns = [
     path("", include("apps.compliance.urls")),
     path("", include("apps.documents.urls")),
     path("", include("apps.finance.urls")),
+    path("", include("apps.budget.urls")),
 ]
 
 if settings.ENABLE_DJANGO_ADMIN:

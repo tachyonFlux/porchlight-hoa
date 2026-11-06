@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Past years{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Past years (spreadsheet imports)</h1>
+  {% if can_manage %}<a class="btn primary" href="{% url 'budget:history_upload' %}">Import a spreadsheet</a>{% endif %}</div>
+{% include "budget/_nav.html" with tab="history" %}
+<form method="get" class="actions" style="margin-bottom:1rem">
+  <select name="year" style="width:auto"><option value="">All years</option>{% for y in years %}<option value="{{ y }}" {% if f.year == y|stringformat:"s" %}selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+  <select name="account" style="width:auto"><option value="">All categories</option>{% for a in accounts %}<option value="{{ a.pk }}" {% if f.account == a.pk|stringformat:"s" %}selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}</select>
+  <button type="submit">Filter</button></form>
+<div class="card table-wrap"><table><thead><tr><th>Year</th><th>Category</th><th>Description</th><th>Spreadsheet category</th><th class="num">Amount</th></tr></thead><tbody>
+{% for a in page %}<tr><td>{{ a.year }}</td><td>{{ a.account.code }} {{ a.account.name }}</td><td><small>{{ a.description }}</small></td><td><small class="muted">{{ a.source_category }}</small></td><td class="num">{{ a.amount_cents|money }}</td></tr>
+{% empty %}<tr><td colspan="5" class="empty">Nothing imported{% if f.year or f.account %} for that filter{% endif %}.</td></tr>{% endfor %}
+{% if page.object_list %}<tr><td colspan="4"><strong>Total</strong></td><td class="num"><strong>{{ total|money }}</strong></td></tr>{% endif %}
+</tbody></table></div>
+{% if page.has_other_pages %}<p class="actions">{% if page.has_previous %}<a class="btn small" href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}<span class="muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn small" href="?page={{ page.next_page_number }}">Next</a>{% endif %}</p>{% endif %}
+{% if imports %}<div class="card"><h2>Imports</h2><ul class="list">{% for b in imports %}
+  <li class="row"><span class="grow"><a href="?batch={{ b.pk }}">{{ b.filename }}</a><br><small class="muted">{{ b.rows }} amounts · {{ b.created_at|date:"M j, Y" }}{% if b.created_by %} by {{ b.created_by }}{% endif %}</small></span>
+  {% if can_manage %}<form method="post" class="inline-form" onsubmit="return confirm('Remove everything from this import?')">{% csrf_token %}<button class="small danger" name="delete_batch" value="{{ b.pk }}">Remove</button></form>{% endif %}</li>
+{% endfor %}</ul></div>{% endif %}
+{% endblock %}

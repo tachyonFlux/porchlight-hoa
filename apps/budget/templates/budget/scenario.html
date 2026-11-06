@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}{{ s.fiscal_year }} budget: {{ s.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ s.fiscal_year }} budget: {{ s.name }}
+  {% if s.is_adopted %}<span class="badge ok">Adopted</span>{% endif %}{% if s.is_published %} <span class="badge accent">Published</span>{% endif %}</h1>
+  <div class="actions">
+    <a class="btn" href="{% url 'budget:scenario_edit' s.pk %}">Settings</a>
+    <a class="btn" href="{% url 'budget:scenario_create' %}?copy={{ s.pk }}">Copy</a>
+    <a class="btn" target="_blank" href="{% url 'budget:scenario_print' s.pk %}">Print</a>
+    <a class="btn" href="{% url 'budget:scenario_print' s.pk %}?format=pdf">PDF</a>
+  </div></div>
+{% include "budget/_nav.html" with tab="" %}
+{% for w in r.warnings %}<div class="callout" style="background:var(--warn-soft)">{{ w }}</div>{% endfor %}
+
+<div class="card"><h2>Dues needed</h2>{% include "budget/_dues_box.html" %}
+  <p class="muted"><small>{{ r.homes }} homes paying dues · projected from {{ s.base_year }} actuals · {{ s.inflation_pct|floatformat:"-2" }}% inflation.</small></p>
+  {% if can_manage %}<div class="actions">
+    {% if r.dues %}<a class="btn primary" href="{% url 'budget:scenario_adopt' s.pk %}">{% if s.is_adopted %}Re-adopt with these numbers{% else %}Adopt this budget{% endif %}</a>{% endif %}
+    {% if s.is_adopted %}<form method="post" action="{% url 'budget:scenario_publish' s.pk %}" class="inline-form">{% csrf_token %}
+      {% if s.is_published %}<button name="action" value="publish">Re-publish current numbers</button> <button name="action" value="unpublish">Unpublish</button>
+      {% else %}<button name="action" value="publish">Publish to residents</button>{% endif %}</form>{% endif %}
+  </div>{% if s.is_published %}<p class="muted"><small>Residents see the copy published {{ s.published_at|date:"M j, Y" }} at <a href="{% url 'budget:published' s.fiscal_year %}">{% url 'budget:published' s.fiscal_year %}</a>.</small></p>{% endif %}{% endif %}
+</div>
+
+<form method="post" action="{% url 'budget:scenario_lines' s.pk %}" id="lines">{% csrf_token %}
+<div class="card table-wrap"><h2>Line items</h2>
+  <p class="muted"><small>Pick how each category is projected. "Years" is used by average and trend; the amount box by "Enter an amount" (later years grow with inflation).</small></p>
+  <table><thead><tr><th>Category</th>{% for y in r.history_years %}<th class="num">{{ y }}</th>{% endfor %}<th>Method</th><th>Years</th><th>Amount</th><th class="num">{{ s.fiscal_year }}</th></tr></thead>
+  <tbody>
+    <tr><th colspan="{{ r.history_years|length|add:5 }}">Income other than dues</th></tr>
+    {% include "budget/_line_rows.html" with lines=r.income %}
+    <tr><th colspan="{{ r.history_years|length|add:5 }}">Operating expenses</th></tr>
+    {% include "budget/_line_rows.html" with lines=r.expense %}
+  </tbody></table>
+  <div class="actions" style="margin-top:.75rem"><button class="primary" type="submit">Save projections</button></div>
+</div></form>
+
+<div class="card" id="one-time"><h2>One-time items</h2>
+  <ul class="list">{% for i in s.one_time_items.all %}<li class="row"><span class="grow">{{ i.year }}: {{ i.description }} {% if i.is_income %}<span class="badge ok">income</span>{% endif %}{% if i.from_reserve %} <span class="badge">reserve fund</span>{% endif %}</span>
+    <span class="num">{{ i.amount_cents|money }}</span>
+    <form method="post" action="{% url 'budget:one_time_item' s.pk %}" class="inline-form">{% csrf_token %}<button class="small danger" name="delete" value="{{ i.pk }}">Remove</button></form></li>
+  {% empty %}<li class="muted">None. Add things like a one-off legal bill, a special project, or a grant.</li>{% endfor %}</ul>
+  <form method="post" action="{% url 'budget:one_time_item' s.pk %}">{% csrf_token %}
+    <div class="grid three">{% for f in item_form %}<div class="field">{% if f.widget_type == 'checkbox' %}<label>{{ f }} {{ f.label }}</label>{% else %}{{ f.label_tag }}{{ f }}{% endif %}</div>{% endfor %}</div>
+    <button type="submit">Add item</button></form>
+</div>
+
+<div class="card table-wrap"><h2>Reserve fund</h2>
+  <div class="grid three">
+    <div class="stat"><span class="num">{{ s.starting_reserve_cents|money }}</span><span class="label">balance at the start of {{ s.fiscal_year }}</span></div>
+    <div class="stat"><span class="num">{{ r.fully_funded_cents|money }}</span><span class="label">fully funded target</span></div>
+    <div class="stat"><span class="num">{% if r.percent_funded is not None %}{{ r.percent_funded }}%{% else %}—{% endif %}</span><span class="label">percent funded</span></div>
+  </div>
+  {% if not r.components %}<p class="muted">No reserve components yet. <a href="{% url 'budget:reserves' %}">Add them</a> to plan replacements.</p>{% endif %}
+  <table style="margin-top:1rem"><thead><tr><th>Year</th><th class="num">Start</th><th class="num">Contribution</th><th>Replacements</th><th class="num">Spending</th><th class="num">End</th></tr></thead><tbody>
+  {% for y in r.reserve %}<tr><td>{{ y.year }}</td><td class="num">{{ y.start_cents|money }}</td><td class="num">{{ y.contribution_cents|money }}</td>
+    <td><small>{% for name, cents in y.replacements %}{{ name }} ({{ cents|money }}){% if not forloop.last %}, {% endif %}{% endfor %}</small></td>
+    <td class="num">{{ y.spending_cents|money }}</td><td class="num" {% if y.short %}style="color:var(--danger);font-weight:700"{% endif %}>{{ y.end_cents|money }}{% if y.short %} ⚠{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  {% if r.reserve_flags %}<p style="color:var(--danger)">The reserve fund runs out in {{ r.reserve_flags.0.year }}. Raise the contribution or plan a special assessment.</p>{% endif %}
+</div>
+
+{% if r.cash %}<div class="card table-wrap"><h2>Operating cash, {{ r.years.0 }}–{{ r.years|last }}</h2>
+  <table><thead><tr><th>Year</th><th class="num">Start</th><th class="num">Dues / home</th><th class="num">Dues collected</th><th class="num">Other income</th><th class="num">Expenses</th><th class="num">To reserves</th><th class="num">End</th></tr></thead><tbody>
+  {% for c in r.cash %}<tr><td>{{ c.year }}</td><td class="num">{{ c.start_cents|money }}</td><td class="num">{{ c.dues_per_home_cents|money }}</td><td class="num">{{ c.dues_cents|money }}</td><td class="num">{{ c.other_income_cents|money }}</td><td class="num">{{ c.expense_cents|money }}</td><td class="num">{{ c.reserve_transfer_cents|money }}</td>
+    <td class="num" {% if c.below_minimum %}style="color:var(--danger);font-weight:700"{% endif %}>{{ c.end_cents|money }}{% if c.below_minimum %} ⚠{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  <p class="muted"><small>Later years assume dues rise {{ s.future_increase_pct|floatformat:"-2" }}% a year and contingency isn't spent. ⚠ = below the {{ s.min_operating_balance_cents|money }} minimum.</small></p>
+</div>{% endif %}
+
+{% if s.notes %}<div class="card"><h2>Notes</h2><p>{{ s.notes|linebreaksbr }}</p></div>{% endif %}
+{% if not s.is_adopted and not s.is_published %}<form method="post" action="{% url 'budget:scenario_delete' s.pk %}" onsubmit="return confirm('Delete this scenario?')" style="margin-top:1rem">{% csrf_token %}<button class="danger small">Delete scenario</button></form>{% endif %}
+{% endblock %}

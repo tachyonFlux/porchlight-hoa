@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load porchlight %}
+{% block title %}Compare scenarios{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Compare scenarios</h1></div>
+{% include "budget/_nav.html" with tab="compare" %}
+<form method="get" class="card"><p style="margin-top:0">Choose up to four:</p>
+  <div class="actions">{% for s in all %}<label style="font-weight:normal"><input type="checkbox" name="s" value="{{ s.pk }}" {% if s.pk in chosen %}checked{% endif %}>{{ s.fiscal_year }}: {{ s.name }}</label>{% endfor %}</div>
+  <button type="submit" style="margin-top:.5rem">Compare</button></form>
+{% if results %}
+<div class="card table-wrap"><table><thead><tr><th></th>{% for r in results %}<th class="num"><a href="{% url 'budget:scenario' r.scenario.pk %}">{{ r.scenario.fiscal_year }}: {{ r.scenario.name }}</a>{% if r.scenario.is_adopted %}<br><span class="badge ok">Adopted</span>{% endif %}</th>{% endfor %}</tr></thead><tbody>
+  <tr><td>Operating expenses</td>{% for r in results %}<td class="num">{{ r.dues.opex_cents|money }}</td>{% endfor %}</tr>
+  <tr><td>Reserve contribution</td>{% for r in results %}<td class="num">{{ r.dues.reserve_cents|money }}</td>{% endfor %}</tr>
+  <tr><td>Contingency</td>{% for r in results %}<td class="num">{{ r.dues.contingency_cents|money }}</td>{% endfor %}</tr>
+  <tr><td>Other income</td>{% for r in results %}<td class="num">{{ r.dues.other_income_cents|money }}</td>{% endfor %}</tr>
+  <tr><td>Collection rate</td>{% for r in results %}<td class="num">{{ r.scenario.collection_rate_pct|floatformat:"-2" }}%</td>{% endfor %}</tr>
+  <tr><td><strong>Dues per period</strong></td>{% for r in results %}<td class="num"><strong>{% if r.dues %}{{ r.dues.per_period_cents|money }}{% else %}—{% endif %}</strong></td>{% endfor %}</tr>
+  <tr><td>Per home per year</td>{% for r in results %}<td class="num">{{ r.dues.annual_cents|money }}</td>{% endfor %}</tr>
+  <tr><td>Change vs current</td>{% for r in results %}<td class="num" {% if r.dues.over_cap %}style="color:var(--danger)"{% endif %}>{{ r.dues.change_cents|money_signed }}{% if r.dues.change_pct is not None %} ({{ r.dues.change_pct }}%){% endif %}{% if r.dues.over_cap %}<br><small>over {{ r.dues.cap_pct|floatformat:"-2" }}% cap</small>{% endif %}</td>{% endfor %}</tr>
+  <tr><td>Reserve percent funded</td>{% for r in results %}<td class="num">{% if r.percent_funded is not None %}{{ r.percent_funded }}%{% else %}—{% endif %}</td>{% endfor %}</tr>
+  <tr><th colspan="{{ results|length|add:1 }}">Operating cash at year end</th></tr>
+  {% for y in years %}<tr><td>{{ y }}</td>{% for r in results %}<td class="num">{% for c in r.cash %}{% if c.year == y %}<span {% if c.below_minimum %}style="color:var(--danger);font-weight:700"{% endif %}>{{ c.end_cents|money }}{% if c.below_minimum %} ⚠{% endif %}</span>{% endif %}{% endfor %}</td>{% endfor %}</tr>{% endfor %}
+  <tr><th colspan="{{ results|length|add:1 }}">Reserve balance at year end</th></tr>
+  {% for y in years %}<tr><td>{{ y }}</td>{% for r in results %}<td class="num">{% for c in r.reserve %}{% if c.year == y %}<span {% if c.short %}style="color:var(--danger);font-weight:700"{% endif %}>{{ c.end_cents|money }}{% if c.short %} ⚠{% endif %}</span>{% endif %}{% endfor %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+<p class="muted"><small>⚠ = operating cash below the scenario's minimum balance, or the reserve fund below zero.</small></p>
+{% else %}<div class="card empty">No scenarios yet.</div>{% endif %}
+{% endblock %}
