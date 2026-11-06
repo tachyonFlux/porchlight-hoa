@@ -69,7 +69,8 @@ class ReserveComponent(models.Model):
         help_text="Years left before it needs replacing, as of the year below.",
     )
     as_of_year = models.PositiveSmallIntegerField(
-        help_text="The year the cost estimate and remaining life were measured."
+        validators=[MinValueValidator(1950), MaxValueValidator(2200)],
+        help_text="The year the cost estimate and remaining life were measured.",
     )
     annual_contribution_cents = models.BigIntegerField(
         "planned yearly contribution", default=0, help_text="Leave 0 to use the straight-line amount."
@@ -103,7 +104,12 @@ class Scenario(models.Model):
     base_year = models.PositiveSmallIntegerField(
         help_text="The most recent complete year of actuals to project from."
     )
-    inflation_pct = models.DecimalField("inflation (% a year)", default=Decimal("3"), **PCT)
+    inflation_pct = models.DecimalField(
+        "inflation (% a year)",
+        default=Decimal("3"),
+        validators=[MinValueValidator(-50), MaxValueValidator(100)],
+        **PCT,
+    )
     contingency_pct = models.DecimalField(
         "contingency (% of operating expenses)",
         default=Decimal("5"),
@@ -128,6 +134,7 @@ class Scenario(models.Model):
     future_increase_pct = models.DecimalField(
         "dues increase in later years (% a year)",
         default=Decimal("0"),
+        validators=[MinValueValidator(-50), MaxValueValidator(100)],
         help_text="Used only for the multi-year cash projection.",
         **PCT,
     )
@@ -147,7 +154,7 @@ class Scenario(models.Model):
     projection_years = models.PositiveSmallIntegerField(
         default=5, validators=[MinValueValidator(1), MaxValueValidator(30)]
     )
-    notes = models.TextField(blank=True)
+    notes = models.TextField("notes (shown to residents if published)", blank=True)
 
     is_adopted = models.BooleanField(default=False)
     adopted_at = models.DateTimeField(null=True, blank=True)
@@ -157,6 +164,8 @@ class Scenario(models.Model):
     adopted_per_period_cents = models.BigIntegerField(null=True, blank=True)
     # Dues per period before this budget was adopted, so "change vs current" stays meaningful.
     replaced_per_period_cents = models.BigIntegerField(null=True, blank=True)
+    # Frozen copy of the numbers when adopted (what prints and what residents see).
+    adopted_snapshot = models.JSONField(null=True, blank=True)
     # What residents see: a frozen copy, so later edits or imports don't change a published budget.
     published_snapshot = models.JSONField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
@@ -215,7 +224,7 @@ class ScenarioLine(models.Model):
 class OneTimeItem(models.Model):
     scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name="one_time_items")
     year = models.PositiveSmallIntegerField()
-    description = models.CharField(max_length=200)
+    description = models.CharField(max_length=200, help_text="Shown to residents if the budget is published.")
     amount_cents = models.BigIntegerField(help_text="Positive amount.")
     is_income = models.BooleanField(default=False, help_text="Money coming in (e.g. a grant) instead of out.")
     from_reserve = models.BooleanField(

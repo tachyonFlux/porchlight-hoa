@@ -12,7 +12,7 @@ from apps.core import audit
 from apps.core.permissions import board_required
 from apps.core.ratelimit import hit, too_many
 from apps.core.uploads import serve_private
-from apps.core.utils import absolute_url, client_ip
+from apps.core.utils import absolute_url, client_ip, is_int
 from apps.meetings.services import can_see
 
 from . import services
@@ -93,14 +93,14 @@ def document_edit(request, pk):
 def categories(request):
     form = CategoryForm(request.POST or None)
     if request.method == "POST":
-        if request.POST.get("delete", "").isdigit():
+        if is_int(request.POST.get("delete", "")):
             category = DocumentCategory.objects.filter(pk=int(request.POST["delete"])).first()
             if category:
                 audit.record(request, "documents.category_deleted", category)
                 category.delete()
             messages.success(request, "Category removed. Its documents are now uncategorized.")
             return redirect("documents:categories")
-        if request.POST.get("edit", "").isdigit():
+        if is_int(request.POST.get("edit", "")):
             category = get_object_or_404(DocumentCategory, pk=int(request.POST["edit"]))
             edit_form = CategoryForm(request.POST, instance=category)
             if edit_form.is_valid():
@@ -131,7 +131,7 @@ def share_list(request):
 @board_required
 def share_create(request):
     initial = {}
-    if request.GET.get("document", "").isdigit():
+    if is_int(request.GET.get("document", "")):
         initial["documents"] = [int(request.GET["document"])]
     form = ShareLinkForm(request.POST or None, initial=initial, user=request.user)
     if request.method == "POST" and form.is_valid():

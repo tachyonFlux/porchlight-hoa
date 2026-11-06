@@ -6,6 +6,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from apps.core.utils import is_int
+
 
 def parse_reminder_days(value):
     """'30, 7, 1' -> [30, 7, 1]. Raises ValidationError on junk."""
@@ -14,7 +16,7 @@ def parse_reminder_days(value):
         part = part.strip()
         if not part:
             continue
-        if not part.isdigit() or int(part) > 365:
+        if not is_int(part) or int(part) > 365:
             raise ValidationError("Use whole numbers of days between 0 and 365, separated by commas.")
         days.append(int(part))
     return sorted(set(days), reverse=True)

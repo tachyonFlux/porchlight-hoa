@@ -19,7 +19,7 @@ from apps.core.models import HOASettings
 from apps.core.pdf import render_pdf
 from apps.core.permissions import board_required, treasurer_required
 from apps.core.ratelimit import rate_limit
-from apps.core.utils import absolute_url
+from apps.core.utils import absolute_url, is_int
 
 from . import periods, services
 from .forms import (
@@ -123,7 +123,7 @@ def overview(request):
     """Treasurer report: who has paid for a period, who hasn't."""
     all_periods = BillingPeriod.objects.all()
     period = None
-    if request.GET.get("period", "").isdigit():
+    if is_int(request.GET.get("period", "")):
         period = all_periods.filter(pk=int(request.GET["period"])).first()
     period = period or all_periods.first()
     statuses = (
@@ -165,7 +165,7 @@ def overview(request):
 def report_csv(request):
     """CSV of every active home: current balance, and status for one period if chosen."""
     period = None
-    if request.GET.get("period", "").isdigit():
+    if is_int(request.GET.get("period", "")):
         period = get_object_or_404(BillingPeriod, pk=int(request.GET["period"]))
     statuses = {s.invoice.home_id: s for s in services.statuses_for_period(period)} if period else {}
     balances = services.balances_by_home()
@@ -240,7 +240,7 @@ def home_ledger(request, pk):
 @board_required
 def payment_new(request):
     home = None
-    if request.GET.get("home", "").isdigit():
+    if is_int(request.GET.get("home", "")):
         home = Home.objects.filter(pk=int(request.GET["home"])).first()
     form = PaymentForm(request.POST or None, home=home)
     if request.method == "POST" and form.is_valid():

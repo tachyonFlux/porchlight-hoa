@@ -17,3 +17,9 @@ def client_ip(request):
 
 def absolute_url(path):
     return f"{settings.BASE_URL}{path}"
+
+
+def is_int(value):
+    """True for a plain ASCII non-negative integer string. (str.isdigit() also accepts
+    characters like '²' that int() then rejects.)"""
+    return isinstance(value, str) and value.isascii() and value.isdigit()

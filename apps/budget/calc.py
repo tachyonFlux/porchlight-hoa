@@ -95,7 +95,13 @@ class Component:
     annual_contribution_cents: int = 0
 
     def remaining_in(self, year):
-        return self.remaining_life - (year - self.as_of_year)
+        """Years left in `year`. After the first replacement it's assumed to be replaced on
+        schedule every useful life (the same assumption the reserve projection makes)."""
+        first = self.replacement_year
+        if year <= first:
+            return first - year
+        cycle = (year - first) % max(int(self.useful_life), 1)
+        return 0 if cycle == 0 else self.useful_life - cycle
 
     @property
     def replacement_year(self):
@@ -253,6 +259,8 @@ def dues_needed(
             _d(current_annual_cents) * (1 + result.cap_pct / 100) / periods / (100 if round_to_dollar else 1),
             ROUND_FLOOR,
         ) * (100 if round_to_dollar else 1)
+        # Rounding down to a dollar must never put the "capped" amount below today's dues.
+        cap_per_period = max(cap_per_period, _round(_d(current_annual_cents) / periods, ROUND_CEILING))
         capped_annual = cap_per_period * periods
         if annual > capped_annual:
             result.over_cap = True

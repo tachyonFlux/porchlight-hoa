@@ -2,6 +2,7 @@ from django import forms
 from django.utils import timezone
 
 from apps.core.money import MoneyField
+from apps.core.utils import is_int
 
 from .models import Account, BankAccount, CategoryRule, StatementBalance
 
@@ -27,7 +28,7 @@ class BankAccountForm(forms.ModelForm):
 
     def clean_last4(self):
         value = self.cleaned_data["last4"].strip()
-        if value and (not value.isdigit() or len(value) != 4):
+        if value and (not is_int(value) or len(value) != 4):
             raise forms.ValidationError("Enter exactly four digits, or leave blank.")
         return value
 

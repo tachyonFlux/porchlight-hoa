@@ -17,12 +17,15 @@
       <p class="muted">Choose where each of your spreadsheet's categories goes. "Skip" leaves those rows out.</p>
       <table><thead><tr><th>Your category</th><th class="num">Rows</th><th>Porchlight category</th></tr></thead><tbody>
       {% for i, cat, account, n in categories %}<tr><td>{{ cat }}</td><td class="num">{{ n }}</td><td>
-        <select name="cat_{{ i }}"><option value="">— Skip —</option>{% for a in accounts %}<option value="{{ a.pk }}" {% if account and account.pk == a.pk %}selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}</select></td></tr>{% endfor %}
+        <input type="hidden" name="catname_{{ i }}" value="{{ cat }}"><select name="cat_{{ i }}"><option value="">— Skip —</option>{% for a in accounts %}<option value="{{ a.pk }}" {% if account and account.pk == a.pk %}selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}</select></td></tr>{% endfor %}
       </tbody></table></div>
     <div class="card table-wrap"><h2 style="margin-top:0">3. Check and import</h2>
       {% if bad %}<p style="color:var(--danger)">{{ bad|length }} row{{ bad|length|pluralize }} can't be read and will be skipped (first: line {{ bad.0.line }}: {{ bad.0.errors|join:", " }}).</p>{% endif %}
       <table><thead><tr><th>Year</th><th>Your category</th><th>Goes to</th><th class="num">Amount</th></tr></thead><tbody>
       {% for p in preview %}{% if not p.row.errors %}<tr><td>{{ p.row.year }}</td><td><small>{{ p.row.category }}</small></td><td><small>{% if p.account %}{{ p.account.name }}{% else %}<em class="muted">skipped</em>{% endif %}</small></td><td class="num">{{ p.row.amount_cents|money }}</td></tr>{% endif %}{% endfor %}</tbody></table>
+      {% if overlap %}<div class="callout" style="background:var(--warn-soft)">Earlier imports already have amounts for {{ overlap|join:", " }}.
+        <label style="font-weight:normal"><input type="radio" name="overlap" value="replace" checked> Replace them with this file (e.g. a corrected spreadsheet)</label><br>
+        <label style="font-weight:normal"><input type="radio" name="overlap" value="add"> Add this file's amounts to them (it covers different categories)</label></div>{% endif %}
       {% if duplicate %}<p style="color:var(--warn)"><label><input type="checkbox" name="allow_duplicate" value="1"> This exact file was imported on {{ duplicate.created_at|date:"M j, Y" }}. Import it again anyway?</label></p>{% endif %}
       <div class="actions"><button type="submit" name="preview" value="1">Update preview</button><button class="primary" type="submit" name="confirm" value="1">Import {{ ok_count }} row{{ ok_count|pluralize }}</button></div></div>
     {% endif %}

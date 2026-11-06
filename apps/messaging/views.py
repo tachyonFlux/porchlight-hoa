@@ -8,6 +8,7 @@ from apps.community.models import Residency
 from apps.core import audit
 from apps.core.email import bulk_email_allowed
 from apps.core.permissions import board_required
+from apps.core.utils import is_int
 from apps.meetings.services import can_see
 
 from . import services
@@ -106,7 +107,7 @@ def notice_create(request):
     initial = {}
     if key in TEMPLATES:
         initial["subject"], initial["body"] = TEMPLATES[key]
-    if request.GET.get("home", "").isdigit():
+    if is_int(request.GET.get("home", "")):
         initial["home"] = int(request.GET["home"])
     form = NoticeForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():

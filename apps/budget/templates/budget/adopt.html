@@ -10,7 +10,7 @@
 <p class="muted">Adopting doesn't bill anyone. Billing periods already created keep the amount they were created with{% if existing_periods %}:{% else %}.{% endif %}</p>
 {% if existing_periods %}<ul>{% for p in existing_periods %}<li>{{ p.label }}: {{ p.amount_cents|money }}</li>{% endfor %}</ul>{% endif %}
 <p class="muted">Only adopt a budget the board has approved, following your bylaws (some require a meeting or member notice first).</p>
-<form method="post">{% csrf_token %}<div class="actions"><button class="primary" type="submit">Adopt and update dues</button><a class="btn" href="{% url 'budget:scenario' s.pk %}">Cancel</a></div></form>
+<form method="post">{% csrf_token %}<input type="hidden" name="per_period_cents" value="{{ r.dues.per_period_cents }}"><div class="actions"><button class="primary" type="submit">Adopt and update dues</button><a class="btn" href="{% url 'budget:scenario' s.pk %}">Cancel</a></div></form>
 {% else %}<p style="color:var(--danger)">{{ r.dues_error }}</p><a class="btn" href="{% url 'budget:scenario' s.pk %}">Back</a>{% endif %}
 </div>
 {% endblock %}

@@ -299,6 +299,10 @@ def make_scenario(user=None, **kw):
     return services.create_scenario(form, user)
 
 
+def adopt_data(scenario):
+    return {"per_period_cents": services.compute(scenario).dues.per_period_cents}
+
+
 class TestScenario:
     def test_compute_end_to_end(self, bank, homes):
         history_batch(
@@ -368,9 +372,9 @@ class TestScenario:
         b = make_scenario(name="Lean")
         client = login(board_user)
         assert client.get(reverse("budget:scenario_adopt", args=[a.pk])).status_code == 200
-        client.post(reverse("budget:scenario_adopt", args=[a.pk]))
+        client.post(reverse("budget:scenario_adopt", args=[a.pk]), adopt_data(a))
         assert DuesSettings.load().amount_cents == 500_00
-        client.post(reverse("budget:scenario_adopt", args=[b.pk]))
+        client.post(reverse("budget:scenario_adopt", args=[b.pk]), adopt_data(b))
         a.refresh_from_db()
         b.refresh_from_db()
         assert not a.is_adopted and b.is_adopted and b.adopted_per_period_cents == 500_00
@@ -388,7 +392,7 @@ class TestScenario:
         client.post(reverse("budget:scenario_publish", args=[s.pk]))
         s.refresh_from_db()
         assert not s.is_published  # must be adopted first
-        client.post(reverse("budget:scenario_adopt", args=[s.pk]))
+        client.post(reverse("budget:scenario_adopt", args=[s.pk]), adopt_data(s))
         client.post(reverse("budget:scenario_publish", args=[s.pk]))
         s.refresh_from_db()
         assert s.published_snapshot["per_period_cents"] == 500_00
@@ -563,7 +567,14 @@ class TestHistoryImport:
         insurance = acct("5200")
         # categories are sorted: Insurance (0), Lawn (1), Postage (2)
         data = self.columns(
-            cat_0=insurance.pk, cat_1=acct("5000").pk, cat_2="", save_as="Old books", confirm="1"
+            cat_0=insurance.pk,
+            cat_1=acct("5000").pk,
+            cat_2="",
+            catname_0="Insurance",
+            catname_1="Lawn",
+            catname_2="Postage",
+            save_as="Old books",
+            confirm="1",
         )
         response = client.post(reverse("budget:history_map"), data)
         assert response.status_code == 302
@@ -574,7 +585,7 @@ class TestHistoryImport:
             (2024, "5000", 9500_00),
         ]
         mapping = HistoricalMapping.objects.get(name="Old books")
-        assert mapping.category_map == {"Insurance": insurance.pk, "Lawn": acct("5000").pk}
+        assert mapping.category_map == {"Insurance": insurance.pk, "Lawn": acct("5000").pk, "Postage": None}
         assert mapping.columns["category"] == "Line Item"
 
         # Re-import: the saved mapping fills in columns and categories; same file needs confirmation.
@@ -591,7 +602,19 @@ class TestHistoryImport:
             reverse("budget:history_map") + f"?mapping={mapping.pk}",
             self.columns(confirm="1", allow_duplicate="1"),
         )
-        assert HistoricalImport.objects.count() == 2
+        assert HistoricalImport.objects.count() == 1  # overlapping years: must choose replace or add
+        self.start(client)
+        client.post(
+            reverse("budget:history_map") + f"?mapping={mapping.pk}",
+            self.columns(confirm="1", allow_duplicate="1", overlap="replace"),
+        )
+        assert HistoricalImport.objects.count() == 1 and HistoricalAmount.objects.count() == 3
+        self.start(client)
+        client.post(
+            reverse("budget:history_map") + f"?mapping={mapping.pk}",
+            self.columns(confirm="1", allow_duplicate="1", overlap="add"),
+        )
+        assert HistoricalImport.objects.count() == 2 and HistoricalAmount.objects.count() == 6
 
     def test_bank_style_signs_and_default_year(self, board_user, login):
         client = login(board_user)
@@ -634,3 +657,138 @@ def test_scenario_line_methods_match_calc():
         calc.MANUAL,
         calc.EXCLUDE,
     }
+
+
+# ------------------------------------------------------------------ review fixes
+
+
+class TestReviewFixes:
+    def adopted(self, client, **kw):
+        history_batch([(2024, "5000", 5000_00)])
+        s = make_scenario(homes_count="10", **kw)
+        client.post(reverse("budget:scenario_adopt", args=[s.pk]), adopt_data(s))
+        s.refresh_from_db()
+        assert s.is_adopted
+        return s
+
+    def test_adopted_budget_is_locked(self, homes, make_user, login):
+        sec = make_user("sec@example.com", "pw-long-enough-123")
+        BoardPosition.objects.create(user=sec, title=BoardPosition.Title.TREASURER)
+        client = login(sec)
+        s = self.adopted(client)
+        line = s.lines.get(account__code="5000")
+        client.post(reverse("budget:scenario_lines", args=[s.pk]), {f"method_{line.pk}": "exclude"})
+        line.refresh_from_db()
+        assert line.method != "exclude"
+        client.post(
+            reverse("budget:one_time_item", args=[s.pk]),
+            {"year": 2026, "description": "x", "amount_cents": "1"},
+        )
+        assert not s.one_time_items.exists()
+        assert client.get(reverse("budget:scenario_edit", args=[s.pk])).status_code == 302
+
+    def test_print_and_publish_use_adopted_copy(self, homes, board_user, login):
+        client = login(board_user)
+        s = self.adopted(client)
+        history_batch([(2024, "5000", 10000_00)])  # actuals change after adoption
+        page = client.get(reverse("budget:scenario", args=[s.pk])).content.decode()
+        assert "instead of the adopted $500.00" in page
+        assert b"$500.00" in client.get(reverse("budget:scenario_print", args=[s.pk])).content
+        client.post(reverse("budget:scenario_publish", args=[s.pk]))
+        s.refresh_from_db()
+        assert s.published_snapshot["per_period_cents"] == 500_00
+
+    def test_adopt_refuses_changed_numbers(self, homes, board_user, login):
+        history_batch([(2024, "5000", 5000_00)])
+        s = make_scenario(homes_count="10")
+        response = login(board_user).post(
+            reverse("budget:scenario_adopt", args=[s.pk]), {"per_period_cents": "1"}
+        )
+        s.refresh_from_db()
+        assert not s.is_adopted and response.status_code == 302
+
+    def test_adopting_another_unpublishes_the_first(self, homes, board_user, login):
+        client = login(board_user)
+        a = self.adopted(client)
+        client.post(reverse("budget:scenario_publish", args=[a.pk]))
+        b = make_scenario(name="Other", homes_count="10")
+        client.post(reverse("budget:scenario_adopt", args=[b.pk]), adopt_data(b))
+        a.refresh_from_db()
+        assert not a.is_adopted and not a.is_published
+
+    def test_same_year_scenarios_share_baseline(self, homes, board_user, login):
+        dues = DuesSettings.load()
+        dues.amount_cents = 450_00
+        dues.save()
+        client = login(board_user)
+        a = self.adopted(client)
+        b = make_scenario(name="Same", homes_count="10")
+        assert services.compute(a).dues.change_cents == services.compute(b).dues.change_cents == 50_00
+
+    def test_withdraw_adoption(self, homes, board_user, login):
+        client = login(board_user)
+        s = self.adopted(client)
+        client.post(reverse("budget:scenario_publish", args=[s.pk]))
+        client.post(reverse("budget:scenario_publish", args=[s.pk]), {"action": "unadopt"})
+        s.refresh_from_db()
+        assert not s.is_adopted and not s.is_published
+
+    @pytest.mark.parametrize("raw", ["inf", "-Infinity", "1e30", "NaN"])
+    def test_bad_amounts_are_errors_not_crashes(self, homes, board_user, login, raw):
+        s = make_scenario()
+        line = s.lines.get(account__code="5000")
+        response = login(board_user).post(
+            reverse("budget:scenario_lines", args=[s.pk]),
+            {f"method_{line.pk}": "manual", f"manual_{line.pk}": raw},
+        )
+        assert response.status_code == 302
+
+    def test_unicode_digits_dont_crash(self, board_user, login):
+        client = login(board_user)
+        assert client.get(reverse("budget:history"), {"year": "²"}).status_code == 200
+        assert client.get(reverse("budget:compare"), {"s": "²"}).status_code == 200
+        assert client.get(reverse("budget:scenario_create"), {"copy": "²"}).status_code == 200
+        assert client.post(reverse("budget:history"), {"delete_batch": "abc"}).status_code == 404
+
+    def test_base_year_must_be_finished_and_inflation_bounded(self):
+        from django.utils import timezone
+
+        from apps.budget.forms import ScenarioForm
+
+        this_year = timezone.localdate().year
+        form = ScenarioForm({"name": "x", "fiscal_year": this_year + 1, "base_year": this_year})
+        assert not form.is_valid() and "base_year" in form.errors
+        form = ScenarioForm({"name": "x", "inflation_pct": "9999"})
+        assert not form.is_valid() and "inflation_pct" in form.errors
+
+    def test_category_choice_follows_name_not_position(self, board_user, login):
+        client = login(board_user)
+        client.post(reverse("budget:history_upload"), {"file": SimpleUploadedFile("b.csv", CSV)})
+        # A choice posted for a category name that's no longer in the list is ignored.
+        data = TestHistoryImport().columns(cat_0=acct("5900").pk, catname_0="Something else", confirm="1")
+        client.post(reverse("budget:history_map"), data)
+        assert not HistoricalAmount.objects.filter(account__code="5900").exists()
+
+
+class TestReserveAging:
+    def test_past_replacement_ages_through_cycles(self):
+        c = fence(as_of_year=2020, remaining_life=3, useful_life=10, cost_cents=10000_00)
+        # replaced 2023 on schedule; in 2026 three of ten years are used
+        assert c.remaining_in(2026) == 7
+        assert c.fully_funded_cents(2026) == 3000_00
+        assert c.remaining_in(2033) == 0 and c.remaining_in(2023) == 0
+
+    def test_cap_never_below_current(self):
+        d = calc.dues_needed(
+            opex_cents=1206_00,
+            reserve_cents=0,
+            contingency_pct=0,
+            other_income_cents=0,
+            collection_rate_pct=100,
+            homes=1,
+            periods_per_year=12,
+            current_annual_cents=1206_00,  # $100.50 a month
+            cap_pct=0,
+            round_to_dollar=True,
+        )
+        assert d.over_cap and d.capped_per_period_cents == 100_50 and d.capped_shortfall_cents == 6_00

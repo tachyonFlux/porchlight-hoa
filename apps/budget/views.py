@@ -17,6 +17,7 @@ from apps.core import audit
 from apps.core.money import to_cents
 from apps.core.pdf import render_pdf
 from apps.core.permissions import board_required, treasurer_required
+from apps.core.utils import is_int
 from apps.finance import parsers
 from apps.finance.models import Account
 
@@ -107,16 +108,17 @@ def _drill_url(data, account, year):
 def history(request):
     qs = HistoricalAmount.objects.select_related("account", "batch")
     f = request.GET
-    if f.get("year", "").isdigit():
+    if is_int(f.get("year", "")):
         qs = qs.filter(year=int(f["year"]))
-    if f.get("account", "").isdigit():
+    if is_int(f.get("account", "")):
         qs = qs.filter(account_id=int(f["account"]))
-    if f.get("batch", "").isdigit():
+    if is_int(f.get("batch", "")):
         qs = qs.filter(batch_id=int(f["batch"]))
     if request.method == "POST":
         if not _can_manage(request.user):
             raise Http404
-        batch = get_object_or_404(HistoricalImport, pk=request.POST.get("delete_batch") or 0)
+        raw = request.POST.get("delete_batch", "")
+        batch = get_object_or_404(HistoricalImport, pk=int(raw) if is_int(raw) else 0)
         audit.record(request, "budget.history_deleted", batch, {"rows": batch.rows})
         batch.delete()
         messages.success(request, "That import was removed.")
@@ -173,7 +175,7 @@ def history_map(request):
     headers, records = services.read_history_csv(text)
     saved = HistoricalMapping.objects.all()
     chosen = None
-    if request.GET.get("mapping", "").isdigit():
+    if is_int(request.GET.get("mapping", "")):
         chosen = saved.filter(pk=int(request.GET["mapping"])).first()
     form = HistoryMapForm(
         request.POST or None,
@@ -194,16 +196,22 @@ def history_map(request):
     if rows is not None:
         categories = sorted({r.category for r in rows if r.category})
         guessed = services.guess_category_map(categories, chosen.category_map if chosen else None)
-        for i, cat in enumerate(categories):
-            raw = request.POST.get(f"cat_{i}")
-            if raw is None:
-                cat_map[cat] = by_pk.get(guessed.get(cat))
-            else:
-                cat_map[cat] = by_pk.get(int(raw)) if raw.isdigit() else None
+        # Choices are posted with the category name they were made for, so a choice is only
+        # used for that same category (the list changes if a different column is picked).
+        posted = {}
+        for key, value in request.POST.items():
+            if key.startswith("catname_") and is_int(key[8:]):
+                raw = request.POST.get(f"cat_{key[8:]}", "")
+                posted[value] = by_pk.get(int(raw)) if is_int(raw) else None
+        for cat in categories:
+            cat_map[cat] = posted[cat] if cat in posted else by_pk.get(guessed.get(cat))
         duplicate = HistoricalImport.objects.filter(sha256=services.file_hash(text)).first()
+        overlap = services.overlapping_years(rows, cat_map)
         if "confirm" in request.POST:
             if duplicate and not request.POST.get("allow_duplicate"):
                 error = f"This exact file was already imported on {duplicate.created_at:%b %d, %Y}."
+            elif overlap and request.POST.get("overlap") not in ("replace", "add"):
+                error = "Choose whether to replace or add to the amounts already imported for those years."
             else:
                 if form.cleaned_data["save_as"]:
                     HistoricalMapping.objects.update_or_create(
@@ -211,7 +219,8 @@ def history_map(request):
                         defaults={
                             "columns": form.mapping(),
                             "amount_sign": form.cleaned_data["amount_sign"],
-                            "category_map": {k: v.pk for k, v in cat_map.items() if v},
+                            # None = skipped, so a re-import skips it again instead of re-guessing
+                            "category_map": {k: (v.pk if v else None) for k, v in cat_map.items()},
                         },
                     )
                 batch = services.import_history(
@@ -222,6 +231,7 @@ def history_map(request):
                     text,
                     request.user,
                     request,
+                    replace_years=overlap if request.POST.get("overlap") == "replace" else (),
                 )
                 path.unlink(missing_ok=True)
                 request.session.pop(PENDING_KEY, None)
@@ -233,7 +243,7 @@ def history_map(request):
                 )
                 return redirect(f"{reverse('budget:history')}?batch={batch.pk}")
     else:
-        duplicate = None
+        duplicate, overlap = None, []
     preview = []
     if rows:
         for r in rows[:15]:
@@ -256,6 +266,7 @@ def history_map(request):
             "accounts": accounts,
             "error": error,
             "duplicate": duplicate,
+            "overlap": overlap,
             "saved": saved,
             "filename": pending.get("name", ""),
         },
@@ -275,7 +286,8 @@ def reserves(request):
         rows.append(
             {
                 "c": c,
-                "replacement_year": k.replacement_year,
+                "replacement_year": year + k.remaining_in(year),  # next one, this year or later
+                "first_replacement": k.replacement_year,
                 "fully_funded": k.fully_funded_cents(year),
                 "straight_line": k.straight_line_cents,
                 "contribution": k.annual_contribution_cents,
@@ -328,11 +340,25 @@ def component_form(request, pk=None):
 # ------------------------------------------------------------------ scenarios
 
 
+def _locked(request, scenario):
+    """Adopted or published budgets don't change; the board copies one to try changes."""
+    if scenario.is_adopted or scenario.is_published:
+        messages.error(
+            request,
+            "This budget has been adopted or published, so it can't be changed. "
+            "Use Copy to make a new version.",
+        )
+        return redirect("budget:scenario", pk=scenario.pk)
+    return None
+
+
 @board_required
 def scenario_form(request, pk=None):
     scenario = get_object_or_404(Scenario, pk=pk) if pk else None
+    if scenario and (locked := _locked(request, scenario)):
+        return locked
     copy_from = None
-    if not scenario and request.GET.get("copy", "").isdigit():
+    if not scenario and is_int(request.GET.get("copy", "")):
         copy_from = get_object_or_404(Scenario, pk=int(request.GET["copy"]))
     if scenario:
         initial = {}
@@ -353,7 +379,12 @@ def scenario_form(request, pk=None):
     if request.method == "POST" and form.is_valid():
         if scenario:
             scenario = form.save()
-            audit.record(request, "budget.scenario_saved", scenario, {"fields": form.changed_data})
+            audit.record(
+                request,
+                "budget.scenario_saved",
+                scenario,
+                {f: str(form.cleaned_data.get(f)) for f in form.changed_data},
+            )
         else:
             scenario = services.create_scenario(form, request.user, copy_from)
             audit.record(request, "budget.scenario_created", scenario)
@@ -386,6 +417,7 @@ def scenario_detail(request, pk):
             "methods": scenario.lines.model.Method.choices,
             "item_form": OneTimeItemForm(scenario=scenario),
             "can_manage": _can_manage(request.user),
+            "locked": scenario.is_adopted or scenario.is_published,
             "others": Scenario.objects.filter(fiscal_year=scenario.fiscal_year).exclude(pk=scenario.pk),
         },
     )
@@ -396,15 +428,18 @@ def scenario_detail(request, pk):
 def scenario_lines(request, pk):
     """Save every line's projection method from the scenario page in one go."""
     scenario = get_object_or_404(Scenario, pk=pk)
+    if locked := _locked(request, scenario):
+        return locked
     valid = {m for m, _ in scenario.lines.model.Method.choices}
-    errors = []
+    errors, changes = [], {}
     for line in scenario.lines.select_related("account"):
+        before = (line.method, line.years, line.manual_cents)
         method = request.POST.get(f"method_{line.pk}")
         if method not in valid:
             continue
         line.method = method
         years = request.POST.get(f"years_{line.pk}", "")
-        if years.isdigit():
+        if is_int(years):
             line.years = min(max(int(years), 2), 10)
         raw = request.POST.get(f"manual_{line.pk}", "").strip()
         if raw:
@@ -418,6 +453,10 @@ def scenario_lines(request, pk):
         if method == calc.MANUAL and line.manual_cents is None:
             errors.append(line.account.name)
         line.save()
+        if (line.method, line.years, line.manual_cents) != before:
+            changes[line.account.code] = [line.method, line.years, line.manual_cents]
+    if changes:
+        audit.record(request, "budget.lines_saved", scenario, changes)
     if errors:
         messages.error(request, "Enter an amount for: " + ", ".join(errors) + ".")
     else:
@@ -429,14 +468,30 @@ def scenario_lines(request, pk):
 @require_POST
 def one_time_item(request, pk):
     scenario = get_object_or_404(Scenario, pk=pk)
-    if request.POST.get("delete", "").isdigit():
-        scenario.one_time_items.filter(pk=int(request.POST["delete"])).delete()
+    if locked := _locked(request, scenario):
+        return locked
+    if is_int(request.POST.get("delete", "")):
+        item = scenario.one_time_items.filter(pk=int(request.POST["delete"])).first()
+        if item:
+            audit.record(
+                request,
+                "budget.item_removed",
+                scenario,
+                {"item": item.description, "cents": item.amount_cents},
+            )
+            item.delete()
         return redirect(f"{reverse('budget:scenario', args=[scenario.pk])}#one-time")
     form = OneTimeItemForm(request.POST, scenario=scenario)
     if form.is_valid():
         item = form.save(commit=False)
         item.scenario = scenario
         item.save()
+        audit.record(
+            request,
+            "budget.item_added",
+            scenario,
+            {"item": item.description, "year": item.year, "cents": item.amount_cents},
+        )
     else:
         messages.error(
             request, "Couldn't add that item: " + "; ".join(e for es in form.errors.values() for e in es)
@@ -459,12 +514,12 @@ def scenario_delete(request, pk):
 
 @board_required
 def compare(request):
-    ids = [int(x) for x in request.GET.getlist("s") if x.isdigit()][:4]
+    ids = [int(x) for x in request.GET.getlist("s") if is_int(x)][:4]
     scenarios = list(Scenario.objects.filter(pk__in=ids)) if ids else []
     if not scenarios:
         fy = request.GET.get("year", "")
         qs = Scenario.objects.all()
-        if fy.isdigit():
+        if is_int(fy):
             qs = qs.filter(fiscal_year=int(fy))
         latest = qs.first()
         scenarios = list(Scenario.objects.filter(fiscal_year=latest.fiscal_year)[:4]) if latest else []
@@ -499,7 +554,10 @@ def _summary_response(request, summary, filename, draft):
 @board_required
 def scenario_print(request, pk):
     scenario = get_object_or_404(Scenario, pk=pk)
-    summary = services.summary(services.compute(scenario))
+    if scenario.is_adopted and scenario.adopted_snapshot:
+        summary = scenario.adopted_snapshot  # what was actually adopted
+    else:
+        summary = services.summary(services.compute(scenario))
     return _summary_response(
         request, summary, f"budget-{scenario.fiscal_year}", draft=not scenario.is_adopted
     )
@@ -512,8 +570,11 @@ def scenario_adopt(request, pk):
     scenario = get_object_or_404(Scenario, pk=pk)
     result = services.compute(scenario)
     if request.method == "POST":
+        expected = request.POST.get("per_period_cents", "")
         try:
-            services.adopt(scenario, request.user, request)
+            if not is_int(expected):
+                raise ValueError("Please review the amount and try again.")
+            services.adopt(scenario, request.user, request, expected_per_period=int(expected))
         except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("budget:scenario", pk=pk)
@@ -539,15 +600,27 @@ def scenario_adopt(request, pk):
 @require_POST
 def scenario_publish(request, pk):
     scenario = get_object_or_404(Scenario, pk=pk)
-    if request.POST.get("action") == "unpublish":
+    action = request.POST.get("action")
+    if action == "unpublish":
         services.unpublish(scenario, request.user, request)
         messages.success(request, "Residents can no longer see this budget.")
+    elif action == "unadopt":
+        services.unadopt(scenario, request.user, request)
+        messages.success(
+            request,
+            "Adoption withdrawn and the budget unpublished. The dues setting wasn't changed; "
+            "adjust it under Treasurer → Dues settings if needed.",
+        )
     else:
         if not scenario.is_adopted:
             messages.error(request, "Adopt the budget before publishing it to residents.")
             return redirect("budget:scenario", pk=pk)
-        services.publish(scenario, request.user, request)
-        messages.success(request, "Published. Residents can see a copy of this budget as it is now.")
+        try:
+            services.publish(scenario, request.user, request)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("budget:scenario", pk=pk)
+        messages.success(request, "Published. Residents can see the adopted budget.")
     return redirect("budget:scenario", pk=pk)
 
 

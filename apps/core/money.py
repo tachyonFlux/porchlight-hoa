@@ -13,9 +13,11 @@ def to_cents(value) -> int:
         value = value.replace("$", "").replace(",", "").strip()
     try:
         dollars = Decimal(str(value))
+        if not dollars.is_finite() or abs(dollars) >= Decimal("1e12"):
+            raise InvalidOperation
+        return int((dollars * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     except InvalidOperation as exc:
         raise ValueError(f"Not a dollar amount: {value!r}") from exc
-    return int((dollars * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def to_dollars(cents: int) -> Decimal:

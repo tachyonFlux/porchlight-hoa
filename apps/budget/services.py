@@ -12,6 +12,7 @@ from django.db.models.functions import ExtractYear
 from django.utils import timezone
 
 from apps.core import audit
+from apps.core.utils import is_int
 from apps.finance import parsers
 from apps.finance.models import Account, BankAccount, Transaction
 
@@ -306,9 +307,7 @@ def compute(scenario, data=None):
     settings = DuesSettings.load()
     homes = homes_for(scenario)
     fy = scenario.fiscal_year
-    current_per_period = settings.amount_cents
-    if scenario.is_adopted and scenario.replaced_per_period_cents is not None:
-        current_per_period = scenario.replaced_per_period_cents
+    current_per_period = baseline_per_period(scenario.fiscal_year, settings)
     dues, dues_error = None, ""
     try:
         dues = calc.dues_needed(
@@ -323,8 +322,10 @@ def compute(scenario, data=None):
             cap_pct=scenario.increase_cap_pct,
             round_to_dollar=scenario.round_to_dollar,
         )
-    except ValueError as exc:
-        dues_error = str(exc)
+    except (ValueError, ArithmeticError) as exc:  # ArithmeticError: absurd inputs overflow
+        dues_error = (
+            str(exc) if isinstance(exc, ValueError) else "These settings give numbers too large to work with."
+        )
 
     cash = []
     if dues:
@@ -448,16 +449,41 @@ def summary(result):
 
 
 @transaction.atomic
-def adopt(scenario, user, request=None):
-    """Make this the budget for its year and set the dues for billing periods created from now on."""
+def baseline_per_period(fiscal_year, settings=None):
+    """Dues per period before any budget for this year was adopted: what every scenario for
+    the year is compared (and cap-checked) against."""
     from apps.dues.models import DuesSettings
 
+    previous = (
+        Scenario.objects.filter(fiscal_year=fiscal_year, replaced_per_period_cents__isnull=False)
+        .order_by("adopted_at")
+        .values_list("replaced_per_period_cents", flat=True)
+        .first()
+    )
+    return previous if previous is not None else (settings or DuesSettings.load()).amount_cents
+
+
+def adopt(scenario, user, request=None, expected_per_period=None):
+    """Make this the budget for its year and set the dues for billing periods created from now on.
+
+    `expected_per_period` is the amount the treasurer saw when confirming; if the numbers
+    changed in the meantime, nothing is adopted."""
+    from django.db import IntegrityError
+
+    from apps.dues.models import DuesSettings
+
+    scenario = Scenario.objects.select_for_update().get(pk=scenario.pk)
     result = compute(scenario)
     if not result.dues:
         raise ValueError(result.dues_error or "Dues couldn't be calculated.")
-    Scenario.objects.filter(fiscal_year=scenario.fiscal_year, is_adopted=True).exclude(pk=scenario.pk).update(
-        is_adopted=False
-    )
+    if expected_per_period is not None and expected_per_period != result.dues.per_period_cents:
+        raise ValueError(
+            "The numbers changed since you opened the confirmation page. Please review them again."
+        )
+    others = Scenario.objects.filter(fiscal_year=scenario.fiscal_year).exclude(pk=scenario.pk)
+    # Only one budget per year is adopted, and residents shouldn't see one that no longer is.
+    others.filter(is_adopted=True).update(is_adopted=False)
+    others.filter(published_snapshot__isnull=False).update(published_snapshot=None, published_at=None)
     settings = DuesSettings.load()
     old = settings.amount_cents
     settings.amount_cents = result.dues.per_period_cents
@@ -475,7 +501,14 @@ def adopt(scenario, user, request=None):
             .first()
         )
         scenario.replaced_per_period_cents = previous if previous is not None else old
-    scenario.save()
+    scenario.adopted_snapshot = summary(result)
+    try:
+        with transaction.atomic():
+            scenario.save()
+    except IntegrityError as exc:
+        raise ValueError(
+            "Another budget for that year was adopted at the same moment. Please try again."
+        ) from exc
     audit.record(
         request or user,
         "budget.adopted",
@@ -490,10 +523,23 @@ def publish(scenario, user, request=None):
     Scenario.objects.filter(fiscal_year=scenario.fiscal_year, published_snapshot__isnull=False).exclude(
         pk=scenario.pk
     ).update(published_snapshot=None, published_at=None)
-    scenario.published_snapshot = summary(compute(scenario))
+    if not scenario.is_adopted or not scenario.adopted_snapshot:
+        raise ValueError("Adopt the budget before publishing it.")
+    scenario.published_snapshot = scenario.adopted_snapshot  # exactly what was adopted
     scenario.published_at = timezone.now()
     scenario.save(update_fields=["published_snapshot", "published_at", "updated_at"])
     audit.record(request or user, "budget.published", scenario)
+
+
+@transaction.atomic
+def unadopt(scenario, user, request=None):
+    """Withdraw an adoption (e.g. adopted by mistake). Dues settings are left alone."""
+    scenario.is_adopted = False
+    scenario.adopted_snapshot = None
+    scenario.published_snapshot = None
+    scenario.published_at = None
+    scenario.save()
+    audit.record(request or user, "budget.unadopted", scenario)
 
 
 def unpublish(scenario, user, request=None):
@@ -532,7 +578,10 @@ def read_history_csv(text):
                 raise HistoryError(f"Too many rows (max {parsers.MAX_ROWS}).")
             return [c.strip() for c in row], records
     if rows:
-        return [c.strip() for c in rows[0]], [r for r in rows[1:] if any(c.strip() for c in r)]
+        records = [r for r in rows[1:] if any(c.strip() for c in r)]
+        if len(records) > parsers.MAX_ROWS:
+            raise HistoryError(f"Too many rows (max {parsers.MAX_ROWS}).")
+        return [c.strip() for c in rows[0]], records
     raise HistoryError("That file is empty.")
 
 
@@ -588,7 +637,7 @@ def parse_history(headers, records, mapping, default_year=None):
         )
         if "year" in mapping:
             raw = cell(record, "year").upper().removeprefix("FY").strip()
-            row.year = int(raw) if raw.isdigit() and 1900 < int(raw) < 2200 else None
+            row.year = int(raw) if is_int(raw) and 1900 < int(raw) < 2200 else None
             if row.year is None:
                 row.errors.append(f"'{cell(record, 'year')}' isn't a year")
         elif "date" in mapping:
@@ -636,8 +685,18 @@ def file_hash(text):
 
 
 @transaction.atomic
-def import_history(rows, category_map, amount_sign, filename, text, user, request=None):
-    """Save parsed rows. category_map: old name -> Account (rows mapped to None are skipped)."""
+def overlapping_years(rows, category_map):
+    """Years in this file that already have spreadsheet amounts from an earlier import."""
+    years = {r.year for r in rows if not r.errors and category_map.get(r.category)}
+    return sorted(set(HistoricalAmount.objects.filter(year__in=years).values_list("year", flat=True)))
+
+
+def import_history(rows, category_map, amount_sign, filename, text, user, request=None, replace_years=()):
+    """Save parsed rows. category_map: old name -> Account (rows mapped to None are skipped).
+    replace_years: delete earlier spreadsheet amounts for these years first (a corrected file)."""
+    if replace_years:
+        HistoricalAmount.objects.filter(year__in=list(replace_years)).delete()
+        HistoricalImport.objects.filter(amounts__isnull=True).delete()
     batch = HistoricalImport.objects.create(filename=filename[:200], sha256=file_hash(text), created_by=user)
     objs = []
     for row in rows:

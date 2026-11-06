@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 from apps.core import audit
 from apps.core.pdf import render_pdf
 from apps.core.permissions import board_required, treasurer_required
+from apps.core.utils import is_int
 from apps.dues.models import Payment
 
 from . import parsers, services, simplefin
@@ -140,7 +141,7 @@ def rules(request):
         if not (request.user.is_admin or request.user.holds_title("treasurer")):
             messages.error(request, "Only the treasurer or an admin can change rules.")
             return redirect("finance:rules")
-        if request.POST.get("delete", "").isdigit():
+        if is_int(request.POST.get("delete", "")):
             CategoryRule.objects.filter(pk=int(request.POST["delete"])).delete()
             messages.success(request, "Rule deleted.")
             return redirect("finance:rules")
@@ -215,7 +216,7 @@ def import_map(request):
     headers, records = parsers.read_csv(text)
     saved = ImportMapping.objects.filter(columns__isnull=False)
     chosen = None
-    if request.GET.get("mapping", "").isdigit():
+    if is_int(request.GET.get("mapping", "")):
         chosen = saved.filter(pk=int(request.GET["mapping"])).first()
     initial_mapping = chosen.columns if chosen else parsers.guess_mapping(headers)
     form = MappingForm(
@@ -300,13 +301,13 @@ def transactions(request):
         .order_by("-date", "-id")
     )
     f = request.GET
-    if f.get("year", "").isdigit():
+    if is_int(f.get("year", "")):
         qs = qs.filter(date__year=int(f["year"]))
-    if f.get("bank", "").isdigit():
+    if is_int(f.get("bank", "")):
         qs = qs.filter(bank_account_id=int(f["bank"]))
     if f.get("account") == "none":
         qs = qs.filter(account__isnull=True)
-    elif f.get("account", "").isdigit():
+    elif is_int(f.get("account", "")):
         qs = qs.filter(account_id=int(f["account"]))
     if f.get("q"):
         qs = qs.filter(Q(description__icontains=f["q"]) | Q(memo__icontains=f["q"]) | Q(check_number=f["q"]))
@@ -331,7 +332,7 @@ def transactions(request):
 def categorize(request, pk):
     txn = get_object_or_404(Transaction, pk=pk)
     account = None
-    if request.POST.get("account", "").isdigit():
+    if is_int(request.POST.get("account", "")):
         account = get_object_or_404(Account, pk=int(request.POST["account"]))
     rule = services.set_category(
         txn,
@@ -402,7 +403,7 @@ def reconcile_action(request, pk):
         services.unmatch(deposit, request.user, request)
         messages.success(request, "Match removed.")
     elif action == "match":
-        ids = [int(x) for x in request.POST.getlist("payments") if x.isdigit()]
+        ids = [int(x) for x in request.POST.getlist("payments") if is_int(x)]
         chosen = list(
             Payment.objects.filter(pk__in=ids, voided_at__isnull=True).filter(
                 Q(bank_match__isnull=True) | Q(bank_match__transaction=deposit)
@@ -446,7 +447,7 @@ def statements(request, pk):
 
 def _year(request):
     raw = request.GET.get("year", "")
-    return int(raw) if raw.isdigit() else timezone.localdate().year - 1
+    return int(raw) if is_int(raw) else timezone.localdate().year - 1
 
 
 @board_required
@@ -556,7 +557,7 @@ def simplefin_settings(request):
             for link in conn.links.all():
                 value = request.POST.get(f"link_{link.pk}", "")
                 link.bank_account = (
-                    BankAccount.objects.filter(pk=int(value)).first() if value.isdigit() else None
+                    BankAccount.objects.filter(pk=int(value)).first() if is_int(value) else None
                 )
                 link.save(update_fields=["bank_account"])
             audit.record(request, "finance.simplefin_links_saved", conn)

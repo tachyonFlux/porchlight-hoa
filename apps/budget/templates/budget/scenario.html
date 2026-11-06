@@ -5,21 +5,25 @@
 <div class="page-head"><h1>{{ s.fiscal_year }} budget: {{ s.name }}
   {% if s.is_adopted %}<span class="badge ok">Adopted</span>{% endif %}{% if s.is_published %} <span class="badge accent">Published</span>{% endif %}</h1>
   <div class="actions">
-    <a class="btn" href="{% url 'budget:scenario_edit' s.pk %}">Settings</a>
+    {% if not locked %}<a class="btn" href="{% url 'budget:scenario_edit' s.pk %}">Settings</a>{% endif %}
     <a class="btn" href="{% url 'budget:scenario_create' %}?copy={{ s.pk }}">Copy</a>
     <a class="btn" target="_blank" href="{% url 'budget:scenario_print' s.pk %}">Print</a>
     <a class="btn" href="{% url 'budget:scenario_print' s.pk %}?format=pdf">PDF</a>
   </div></div>
 {% include "budget/_nav.html" with tab="" %}
+{% if locked %}<div class="callout">This budget is {% if s.is_adopted %}adopted{% else %}published{% endif %}, so it's locked. To try changes, use <strong>Copy</strong>.
+  {% if s.adopted_snapshot and r.dues and r.dues.per_period_cents != s.adopted_per_period_cents %}<br><strong>Note:</strong> with the actuals as they are now it would come to {{ r.dues.per_period_cents|money }} instead of the adopted {{ s.adopted_per_period_cents|money }} (past-year numbers have changed since). Print, PDF and the residents' copy show what was adopted.{% endif %}</div>{% endif %}
 {% for w in r.warnings %}<div class="callout" style="background:var(--warn-soft)">{{ w }}</div>{% endfor %}
 
 <div class="card"><h2>Dues needed</h2>{% include "budget/_dues_box.html" %}
   <p class="muted"><small>{{ r.homes }} homes paying dues · projected from {{ s.base_year }} actuals · {{ s.inflation_pct|floatformat:"-2" }}% inflation.</small></p>
   {% if can_manage %}<div class="actions">
-    {% if r.dues %}<a class="btn primary" href="{% url 'budget:scenario_adopt' s.pk %}">{% if s.is_adopted %}Re-adopt with these numbers{% else %}Adopt this budget{% endif %}</a>{% endif %}
-    {% if s.is_adopted %}<form method="post" action="{% url 'budget:scenario_publish' s.pk %}" class="inline-form">{% csrf_token %}
-      {% if s.is_published %}<button name="action" value="publish">Re-publish current numbers</button> <button name="action" value="unpublish">Unpublish</button>
-      {% else %}<button name="action" value="publish">Publish to residents</button>{% endif %}</form>{% endif %}
+    {% if r.dues and not s.is_adopted and not s.is_published %}<a class="btn primary" href="{% url 'budget:scenario_adopt' s.pk %}">Adopt this budget</a>{% endif %}
+    <form method="post" action="{% url 'budget:scenario_publish' s.pk %}" class="inline-form">{% csrf_token %}
+      {% if s.is_published %}<button name="action" value="unpublish">Unpublish</button>
+      {% elif s.is_adopted %}<button name="action" value="publish">Publish to residents</button>{% endif %}
+      {% if s.is_adopted %}<button name="action" value="unadopt" class="danger" onclick="return confirm('Withdraw the adoption? The dues setting is not changed back automatically.')">Withdraw adoption</button>{% endif %}
+    </form>
   </div>{% if s.is_published %}<p class="muted"><small>Residents see the copy published {{ s.published_at|date:"M j, Y" }} at <a href="{% url 'budget:published' s.fiscal_year %}">{% url 'budget:published' s.fiscal_year %}</a>.</small></p>{% endif %}{% endif %}
 </div>
 
@@ -33,17 +37,17 @@
     <tr><th colspan="{{ r.history_years|length|add:5 }}">Operating expenses</th></tr>
     {% include "budget/_line_rows.html" with lines=r.expense %}
   </tbody></table>
-  <div class="actions" style="margin-top:.75rem"><button class="primary" type="submit">Save projections</button></div>
+  {% if not locked %}<div class="actions" style="margin-top:.75rem"><button class="primary" type="submit">Save projections</button></div>{% endif %}
 </div></form>
 
 <div class="card" id="one-time"><h2>One-time items</h2>
   <ul class="list">{% for i in s.one_time_items.all %}<li class="row"><span class="grow">{{ i.year }}: {{ i.description }} {% if i.is_income %}<span class="badge ok">income</span>{% endif %}{% if i.from_reserve %} <span class="badge">reserve fund</span>{% endif %}</span>
     <span class="num">{{ i.amount_cents|money }}</span>
-    <form method="post" action="{% url 'budget:one_time_item' s.pk %}" class="inline-form">{% csrf_token %}<button class="small danger" name="delete" value="{{ i.pk }}">Remove</button></form></li>
+    {% if not locked %}<form method="post" action="{% url 'budget:one_time_item' s.pk %}" class="inline-form">{% csrf_token %}<button class="small danger" name="delete" value="{{ i.pk }}">Remove</button></form>{% endif %}</li>
   {% empty %}<li class="muted">None. Add things like a one-off legal bill, a special project, or a grant.</li>{% endfor %}</ul>
-  <form method="post" action="{% url 'budget:one_time_item' s.pk %}">{% csrf_token %}
+  {% if not locked %}<form method="post" action="{% url 'budget:one_time_item' s.pk %}">{% csrf_token %}
     <div class="grid three">{% for f in item_form %}<div class="field">{% if f.widget_type == 'checkbox' %}<label>{{ f }} {{ f.label }}</label>{% else %}{{ f.label_tag }}{{ f }}{% endif %}</div>{% endfor %}</div>
-    <button type="submit">Add item</button></form>
+    <button type="submit">Add item</button></form>{% endif %}
 </div>
 
 <div class="card table-wrap"><h2>Reserve fund</h2>

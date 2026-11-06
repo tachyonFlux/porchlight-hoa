@@ -15,7 +15,7 @@ from apps.core.email import send_templated
 from apps.core.models import HOASettings
 from apps.core.permissions import board_required
 from apps.core.ratelimit import hit, rate_limit, too_many
-from apps.core.utils import absolute_url, client_ip
+from apps.core.utils import absolute_url, client_ip, is_int
 
 from . import services
 from .forms import (
@@ -342,7 +342,7 @@ def invite_letters(request):
     if scope == "unclaimed":
         homes = homes.exclude(residencies__in=Residency.objects.current())
     one = request.GET.get("home")
-    if one and one.isdigit():
+    if one and is_int(one):
         homes = Home.objects.filter(pk=int(one))
     letters = []
     for home in homes:

@@ -33,7 +33,7 @@ class OTPForm(forms.Form):
     )
 
     def clean_token(self):
-        token = "".join(ch for ch in self.cleaned_data["token"] if ch.isdigit())
+        token = "".join(ch for ch in self.cleaned_data["token"] if ch in "0123456789")
         if len(token) != 6:
             raise forms.ValidationError("Enter the 6-digit code from your authenticator app.")
         return token

@@ -52,6 +52,10 @@ class ScenarioForm(forms.ModelForm):
             self.add_error("fiscal_year", "Choose a year within five years of now.")
         if fy and base and base >= fy:
             self.add_error("base_year", "The base year has to be before the budget year.")
+        elif base and base >= this_year:
+            self.add_error("base_year", "Choose a year that's over; this year's numbers aren't complete yet.")
+        elif fy and base and base < fy - 20:
+            self.add_error("base_year", "Choose a base year within 20 years of the budget year.")
         return data
 
 
