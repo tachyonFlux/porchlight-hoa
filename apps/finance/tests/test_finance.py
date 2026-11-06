@@ -387,3 +387,202 @@ class TestSimpleFIN:
 
     def test_page_off_without_flag(self, login, board_user):
         assert b"is off" in login(board_user).get(reverse("finance:simplefin")).content
+
+
+# ------------------------------------------------------------------ review fixes
+
+
+class TestReviewFixes:
+    _deposit = TestReconcile._deposit
+
+    @pytest.mark.parametrize("raw", ["1.234,56", "12.345"])
+    def test_ambiguous_amount_formats_rejected(self, raw):
+        with pytest.raises(ValueError):
+            parsers.parse_amount(raw)
+
+    def test_zero_split_row_is_zero_not_missing(self):
+        headers = ["Date", "Description", "Withdrawals", "Deposits"]
+        rows = parsers.apply_mapping(
+            headers,
+            [["01/05/2027", "ADJ", "0.00", "0.00"]],
+            {
+                "date": "Date",
+                "description": "Description",
+                "withdrawal": "Withdrawals",
+                "deposit": "Deposits",
+            },
+        )
+        assert rows[0].ok and rows[0].amount_cents == 0
+
+    def test_unmatch_is_remembered(self, bank, home):
+        dues.record_payment(home, 30000, "check", date(2027, 1, 3))
+        d = self._deposit(bank, 30000, date(2027, 1, 5))
+        services.auto_match_deposits()
+        services.unmatch(d, None)
+        services.auto_match_deposits()
+        assert not PaymentMatch.objects.exists()
+
+    def test_transfers_and_reserve_deposits_not_auto_matched(self, bank, home):
+        dues.record_payment(home, 30000, "check", date(2027, 1, 3))
+        transfer = self._deposit(bank, 30000, date(2027, 1, 4))
+        transfer.account = Account.objects.get(code="9000")
+        transfer.save()
+        reserve = BankAccount.objects.create(name="Reserve", is_reserve=True, opening_date=date(2027, 1, 1))
+        self._deposit(reserve, 30000, date(2027, 1, 5))
+        services.auto_match_deposits()
+        assert not PaymentMatch.objects.exists()
+
+    def test_voiding_payment_drops_its_deposit_match(self, bank, home, other_home):
+        p1 = dues.record_payment(home, 30000, "check", date(2027, 1, 3))
+        dues.record_payment(other_home, 30000, "check", date(2027, 1, 4))
+        d = self._deposit(bank, 60000, date(2027, 1, 6))
+        services.auto_match_deposits()
+        assert d.payment_matches.count() == 2
+        dues.void_payment(p1, "bounced")
+        assert not d.payment_matches.exists()
+
+    def test_duplicate_statement_date_is_form_error(self, login, board_user, bank):
+        client = login(board_user)
+        url = reverse("finance:statements", args=[bank.pk])
+        data = {"statement_date": "2026-10-31", "ending_balance_cents": "100.00"}
+        client.post(url, data)
+        response = client.post(url, data)
+        assert response.status_code == 200 and b"already a statement" in response.content
+        assert bank.statements.count() == 1
+
+    def test_categorize_next_must_be_local(self, login, board_user, bank):
+        t = self._deposit(bank, 100, date(2027, 1, 5))
+        response = login(board_user).post(
+            reverse("finance:categorize", args=[t.pk]), {"account": "", "next": "https://evil.example/"}
+        )
+        assert response.url == reverse("finance:transactions")
+
+    def test_rule_pattern_from_long_description_matches_it(self, login, board_user, bank):
+        t = self._deposit(bank, -100, date(2027, 1, 5))
+        t.description = "ACH DEBIT GREENSCAPE LAWN CARE PPD ID 1234567890"
+        t.save()
+        html = login(board_user).get(reverse("finance:transactions")).content.decode()
+        assert 'value="ACH DEBIT GREENSCAPE LAWN CARE PPD ID 12"' in html
+
+    def test_saved_layout_remembers_flip_sign(self, login, board_user, bank):
+        from apps.finance.models import ImportMapping
+
+        client = login(board_user)
+        upload = SimpleUploadedFile("bank.csv", fixture("bank_amount_column.csv"))
+        client.post(reverse("finance:import_upload"), {"bank_account": bank.pk, "file": upload})
+        headers, _ = parsers.read_csv(parsers.decode(fixture("bank_amount_column.csv")))
+        data = {f"col_{k}": v for k, v in parsers.guess_mapping(headers).items()}
+        data.update({"flip_sign": "on", "save_as": "Flipped", "confirm": "1"})
+        client.post(reverse("finance:import_map"), data)
+        assert ImportMapping.objects.get(name="Flipped").flip_sign is True
+
+
+class TestSimpleFINReviewFixes:
+    def test_redirects_refused(self, sfin_on):
+        class FakeResp:
+            status = 302
+
+            def read(self, n):
+                return b""
+
+        class FakeConn:
+            def __init__(self, *a, **k):
+                pass
+
+            def request(self, *a, **k):
+                pass
+
+            def getresponse(self):
+                return FakeResp()
+
+            def close(self):
+                pass
+
+        with (
+            mock.patch.object(
+                simplefin,
+                "_check_public_https",
+                lambda url: (simplefin.urllib.parse.urlsplit(url), "1.1.1.1"),
+            ),
+            mock.patch.object(simplefin, "_PinnedHTTPSConnection", FakeConn),
+        ):
+            with pytest.raises(simplefin.SimpleFINError, match="redirect"):
+                simplefin._request("https://u:p@bridge.example/accounts")
+
+    def test_connection_errors_become_simplefin_errors(self, sfin_on):
+        class Boom:
+            def __init__(self, *a, **k):
+                pass
+
+            def request(self, *a, **k):
+                raise ConnectionResetError("reset")
+
+            def close(self):
+                pass
+
+        with (
+            mock.patch.object(
+                simplefin,
+                "_check_public_https",
+                lambda url: (simplefin.urllib.parse.urlsplit(url), "1.1.1.1"),
+            ),
+            mock.patch.object(simplefin, "_PinnedHTTPSConnection", Boom),
+        ):
+            with pytest.raises(simplefin.SimpleFINError) as exc:
+                simplefin._request("https://u:secretpw@bridge.example/accounts")
+        assert "secretpw" not in str(exc.value)
+
+    def test_bad_port_rejected(self):
+        with pytest.raises(simplefin.SimpleFINError):
+            simplefin._check_public_https("https://bridge.example:99999/x")
+
+    def test_malformed_transactions_skipped(self):
+        rows = simplefin.account_rows(
+            {
+                "id": "A",
+                "transactions": [
+                    {"id": "1", "posted": "nope", "amount": "1.00"},
+                    {"id": "2", "posted": 1799020800, "amount": "abc"},
+                    "junk",
+                    {"id": "3", "posted": 1799020800, "amount": "2.50", "description": "OK"},
+                ],
+            }
+        )
+        assert [r.amount_cents for r in rows] == [250]
+
+    def test_link_added_later_gets_full_first_window(self, sfin_on, bank, board_user):
+        seen = []
+
+        def fake_request(url, method="GET", data=None):
+            if method == "POST":
+                return b"https://user:secret@bridge.example/simplefin"
+            seen.append(int(url.split("start-date=")[1]))
+            return json.dumps(TestSimpleFIN.ACCOUNTS).encode()
+
+        with mock.patch.object(simplefin, "_request", fake_request):
+            services.simplefin_connect(
+                base64.b64encode(b"https://bridge.example/claim/abc").decode(), board_user
+            )
+            link = SimpleFINAccountLink.objects.get()
+            link.bank_account = bank
+            link.save()
+            services.simplefin_sync()
+            services.simplefin_sync()
+        day = 86400
+        assert seen[1] <= seen[0] + day  # the newly linked account still gets the 60-day window
+        assert seen[2] - seen[1] > 40 * day  # after a good sync, only the last week
+        link.refresh_from_db()
+        assert link.last_synced_at is not None
+
+    def test_reconnect_keeps_links(self, sfin_on, bank, board_user):
+        def fake_request(url, method="GET", data=None):
+            if method == "POST":
+                return b"https://user:secret@bridge.example/simplefin"
+            return json.dumps(TestSimpleFIN.ACCOUNTS).encode()
+
+        token = base64.b64encode(b"https://bridge.example/claim/abc").decode()
+        with mock.patch.object(simplefin, "_request", fake_request):
+            services.simplefin_connect(token, board_user)
+            SimpleFINAccountLink.objects.update(bank_account=bank)
+            services.simplefin_connect(token, board_user)
+        assert SimpleFINAccountLink.objects.get().bank_account == bank

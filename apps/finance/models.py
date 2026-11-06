@@ -56,7 +56,7 @@ class ImportMapping(models.Model):
     name = models.CharField(max_length=100, unique=True)
     columns = models.JSONField(default=dict)  # {"date": "Posting Date", "amount": "Amount", ...}
     date_format = models.CharField(max_length=20, blank=True)
-    category_map = models.JSONField(default=dict, blank=True)  # old category name -> account id
+    flip_sign = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -158,6 +158,9 @@ class Transaction(models.Model):
     batch = models.ForeignKey(
         ImportBatch, null=True, blank=True, on_delete=models.SET_NULL, related_name="transactions"
     )
+    match_rejected = models.BooleanField(
+        default=False, help_text="The treasurer removed a match; don't suggest one again automatically."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -226,6 +229,7 @@ class SimpleFINAccountLink(models.Model):
         BankAccount, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     last_balance_cents = models.BigIntegerField(null=True, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [

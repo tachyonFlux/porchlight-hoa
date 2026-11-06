@@ -4,6 +4,6 @@
     {% for a in accounts %}<option value="{{ a.pk }}" {% if t.account_id == a.pk %}selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}
   </select>
   <label style="font-weight:normal;font-size:.8rem;white-space:nowrap" title="Make a rule: anything containing this description gets this category"><input type="checkbox" name="make_rule" value="1">always</label>
-  <input type="hidden" name="pattern" value="{{ t.description|truncatechars:40 }}">
+  <input type="hidden" name="pattern" value="{{ t.description|slice:":40" }}">
   {% if rule %}<small style="color:var(--ok)">rule added</small>{% elif t.categorized_by == 'rule' %}<small class="muted">rule</small>{% endif %}
 </form>

@@ -36,11 +36,14 @@ def import_rows(rows, bank_account, source, filename="", user=None, request=None
     rules = list(
         CategoryRule.objects.filter(is_active=True, account__is_active=True).select_related("account")
     )
-    existing = set(
-        Transaction.objects.filter(
-            bank_account=bank_account, dedupe_key__in=[r.dedupe_key for r in rows if r.ok]
-        ).values_list("dedupe_key", flat=True)
-    )
+    keys = [r.dedupe_key for r in rows if r.ok]
+    existing = set()
+    for i in range(0, len(keys), 500):  # stay under SQLite's query-parameter limit
+        existing.update(
+            Transaction.objects.filter(
+                bank_account=bank_account, dedupe_key__in=keys[i : i + 500]
+            ).values_list("dedupe_key", flat=True)
+        )
     for row in rows:
         if not row.ok:
             batch.rows_error += 1
@@ -156,11 +159,15 @@ def find_match(deposit, payments):
         return [singles[0]], len(singles) == 1
     cands = sorted(cands, key=lambda p: (deposit.date - p.received_on, p.pk))[:MAX_CANDIDATES]
     for size in range(2, min(MAX_COMBINATION, len(cands)) + 1):
-        hits = [
-            c
-            for c in itertools.combinations(cands, size)
-            if sum(p.amount_cents for p in c) == deposit.amount_cents
-        ]
+        hits = itertools.islice(
+            (
+                c
+                for c in itertools.combinations(cands, size)
+                if sum(p.amount_cents for p in c) == deposit.amount_cents
+            ),
+            2,  # one hit is a match; a second makes it ambiguous, no need to look further
+        )
+        hits = list(hits)
         if hits:
             return list(hits[0]), len(hits) == 1
     return [], False
@@ -170,8 +177,23 @@ def find_match(deposit, payments):
 def auto_match_deposits():
     """Suggest (or, when unambiguous, confirm) matches between deposits and dues payments."""
     payments = list(_unmatched_payments())
-    deposits = Transaction.objects.filter(amount_cents__gt=0, payment_matches__isnull=True).order_by(
-        "date", "id"
+    if not payments:
+        return 0
+    first = min(p.received_on for p in payments)
+    last = max(p.received_on for p in payments) + timedelta(days=MATCH_WINDOW_DAYS)
+    # Only deposits that could contain an unmatched payment: dues go into operating
+    # accounts, never transfers, and not ones the treasurer said weren't a match.
+    deposits = (
+        Transaction.objects.filter(
+            amount_cents__gt=0,
+            payment_matches__isnull=True,
+            match_rejected=False,
+            date__gte=first,
+            date__lte=last,
+        )
+        .exclude(account__type=Account.Type.TRANSFER)
+        .exclude(bank_account__is_reserve=True)
+        .order_by("date", "id")
     )
     created = 0
     for deposit in deposits:
@@ -191,6 +213,9 @@ def auto_match_deposits():
 
 
 def confirm_match(deposit, user, request=None):
+    if PaymentMatch.objects.filter(transaction=deposit, payment__voided_at__isnull=False).exists():
+        PaymentMatch.objects.filter(transaction=deposit).delete()
+        raise ValueError("One of those payments was voided, so the match was removed.")
     PaymentMatch.objects.filter(transaction=deposit).update(
         status=PaymentMatch.Status.CONFIRMED, confirmed_by=user
     )
@@ -199,6 +224,8 @@ def confirm_match(deposit, user, request=None):
 
 def unmatch(deposit, user, request=None):
     PaymentMatch.objects.filter(transaction=deposit).delete()
+    deposit.match_rejected = True
+    deposit.save(update_fields=["match_rejected"])
     audit.record(request or user, "finance.match_removed", deposit)
 
 
@@ -208,6 +235,8 @@ def manual_match(deposit, payments, user, request=None):
         raise ValueError("Those payments don't add up to the deposit.")
     with transaction.atomic():
         PaymentMatch.objects.filter(transaction=deposit).delete()
+        deposit.match_rejected = False
+        deposit.save(update_fields=["match_rejected"])
         for p in payments:
             PaymentMatch.objects.create(
                 transaction=deposit, payment=p, status=PaymentMatch.Status.CONFIRMED, confirmed_by=user
@@ -323,10 +352,11 @@ def simplefin_connect(setup_token, user, request=None):
     from .models import SimpleFINConnection
 
     access_url = simplefin.claim(setup_token)
-    SimpleFINConnection.objects.all().delete()  # one connection per HOA
-    conn = SimpleFINConnection.objects.create(
-        access_url_encrypted=simplefin.encrypt(access_url), created_by=user
-    )
+    # One connection per HOA. Reconnecting keeps the account links (same remote ids).
+    conn = SimpleFINConnection.objects.first() or SimpleFINConnection(created_by=user)
+    conn.access_url_encrypted = simplefin.encrypt(access_url)
+    conn.last_error = ""
+    conn.save()
     audit.record(request or user, "finance.simplefin_connected", conn)
     simplefin_sync(conn)
     return conn
@@ -340,7 +370,11 @@ def simplefin_disconnect(user, request=None):
 
 
 def simplefin_sync(conn=None):
-    """Pull recent transactions for every remote account linked to a bank account."""
+    """Pull recent transactions for every remote account linked to a bank account.
+
+    Each link remembers its own last successful sync, so an account linked later (or one
+    that was failing) gets a full first window instead of just the last week.
+    """
     from django.utils import timezone
 
     from . import simplefin
@@ -349,10 +383,13 @@ def simplefin_sync(conn=None):
     conn = conn or SimpleFINConnection.objects.first()
     if conn is None or not simplefin.is_enabled():
         return {"simplefin": "off"}
+    linked = list(conn.links.filter(bank_account__isnull=False))
+    since = min(
+        [simplefin.default_since(link.last_synced_at) for link in linked] or [simplefin.default_since(None)]
+    )
+    started = timezone.now()
     try:
-        accounts, errors = simplefin.fetch_accounts(
-            simplefin.decrypt(conn.access_url_encrypted), simplefin.default_since(conn.last_sync_at)
-        )
+        accounts, errors = simplefin.fetch_accounts(simplefin.decrypt(conn.access_url_encrypted), since)
     except simplefin.SimpleFINError as exc:
         conn.last_error = str(exc)
         conn.save(update_fields=["last_error"])
@@ -361,14 +398,14 @@ def simplefin_sync(conn=None):
     for remote in accounts:
         link, _ = SimpleFINAccountLink.objects.get_or_create(
             connection=conn,
-            remote_id=str(remote.get("id")),
+            remote_id=str(remote.get("id"))[:200],
             defaults={"remote_name": str(remote.get("name", ""))[:200]},
         )
         try:
             link.last_balance_cents = simplefin._cents(remote.get("balance", "0"))
-        except Exception:  # noqa: S110 - balance is informational
-            pass
-        link.save(update_fields=["last_balance_cents"])
+        except (TypeError, ValueError, ArithmeticError):
+            pass  # the balance is informational
+        update = ["last_balance_cents"]
         if link.bank_account_id:
             batch = import_rows(
                 simplefin.account_rows(remote),
@@ -377,7 +414,11 @@ def simplefin_sync(conn=None):
                 filename=link.remote_name,
             )
             imported += batch.rows_imported
-    conn.last_sync_at = timezone.now()
+            if not errors:  # with errors we can't tell which accounts are complete
+                link.last_synced_at = started
+                update.append("last_synced_at")
+        link.save(update_fields=update)
+    conn.last_sync_at = started
     conn.last_error = "; ".join(errors)[:2000]
     conn.save(update_fields=["last_sync_at", "last_error"])
     return {"simplefin_imported": imported}

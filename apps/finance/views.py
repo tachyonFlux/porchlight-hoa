@@ -10,6 +10,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.core import audit
@@ -173,7 +174,7 @@ def import_upload(request):
             if upload.name.lower().endswith((".ofx", ".qfx")) or raw.lstrip()[:20].upper().startswith(
                 (b"OFXHEADER", b"<?XML")
             ):
-                last4, rows = parsers.parse_ofx(raw)
+                last4, rows = parsers.parse_ofx(raw, bank.last4)
                 if bank.last4 and last4 and last4 != bank.last4:
                     messages.warning(
                         request, f"Heads up: that file is for an account ending in {last4}, not {bank.last4}."
@@ -221,7 +222,10 @@ def import_map(request):
         request.POST or None,
         headers=headers,
         initial_mapping=initial_mapping,
-        initial={"date_format": chosen.date_format if chosen else ""},
+        initial={
+            "date_format": chosen.date_format if chosen else "",
+            "flip_sign": chosen.flip_sign if chosen else False,
+        },
     )
     rows, error = None, None
     if form.is_bound and form.is_valid():
@@ -240,7 +244,11 @@ def import_map(request):
             if form.cleaned_data["save_as"]:
                 ImportMapping.objects.update_or_create(
                     name=form.cleaned_data["save_as"].strip(),
-                    defaults={"columns": form.mapping(), "date_format": form.cleaned_data["date_format"]},
+                    defaults={
+                        "columns": form.mapping(),
+                        "date_format": form.cleaned_data["date_format"],
+                        "flip_sign": form.cleaned_data["flip_sign"],
+                    },
                 )
             batch = services.import_rows(
                 rows, bank, ImportBatch.Source.CSV, pending["name"], request.user, request
@@ -342,7 +350,10 @@ def categorize(request, pk):
         )
     if rule:
         messages.success(request, f"Saved, and added a rule: {rule}.")
-    return redirect(request.POST.get("next") or "finance:transactions")
+    target = request.POST.get("next", "")
+    if not url_has_allowed_host_and_scheme(target, {request.get_host()}, request.is_secure()):
+        target = "finance:transactions"
+    return redirect(target)
 
 
 # ------------------------------------------------------------------ reconciliation
@@ -382,8 +393,11 @@ def reconcile_action(request, pk):
         return redirect("finance:reconcile")
     deposit = get_object_or_404(Transaction, pk=pk, amount_cents__gt=0)
     if action == "confirm":
-        services.confirm_match(deposit, request.user, request)
-        messages.success(request, "Match confirmed.")
+        try:
+            services.confirm_match(deposit, request.user, request)
+            messages.success(request, "Match confirmed.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
     elif action == "unmatch":
         services.unmatch(deposit, request.user, request)
         messages.success(request, "Match removed.")
@@ -409,6 +423,11 @@ def statements(request, pk):
     if request.method == "POST":
         if not (request.user.is_admin or request.user.holds_title("treasurer")):
             raise Http404
+        if (
+            form.is_valid()
+            and bank.statements.filter(statement_date=form.cleaned_data["statement_date"]).exists()
+        ):
+            form.add_error("statement_date", "There's already a statement for that date.")
         if form.is_valid():
             statement = form.save(commit=False)
             statement.bank_account = bank

@@ -186,6 +186,16 @@ def record_payment(
 
 
 @transaction.atomic
+def _drop_bank_match(payment):
+    """A voided (bounced) payment can't be part of a deposit match; the deposit goes back
+    to unmatched so the treasurer can look at it again."""
+    from apps.finance.models import PaymentMatch
+
+    match = PaymentMatch.objects.filter(payment=payment).first()
+    if match:
+        PaymentMatch.objects.filter(transaction_id=match.transaction_id).delete()
+
+
 def void_payment(payment, reason, actor=None, request=None):
     payment = Payment.objects.select_for_update().get(pk=payment.pk)
     if payment.voided_at:
@@ -193,6 +203,7 @@ def void_payment(payment, reason, actor=None, request=None):
     payment.voided_at = timezone.now()
     payment.void_reason = reason
     payment.save(update_fields=["voided_at", "void_reason"])
+    _drop_bank_match(payment)
     LedgerEntry.objects.create(
         home=payment.home,
         date=timezone.localdate(),

@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from django.utils import timezone
+
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 20000
 
@@ -29,7 +31,6 @@ HEADER_HINTS = {
     "deposit": ["deposits", "deposit", "credit", "credits", "money in"],
     "check_number": ["check number", "check #", "check no", "check", "reference number", "reference"],
     "memo": ["memo", "notes", "note"],
-    "category": ["category", "account", "type"],
 }
 
 
@@ -80,6 +81,9 @@ def parse_amount(value):
         negative, text = not negative, text[1:]
     elif text.startswith("+"):
         text = text[1:]
+    if "." in text and len(text.rsplit(".", 1)[1]) > 2:
+        # e.g. European "1.234,56" or a typo; better to stop than to import the wrong amount.
+        raise ValueError(f"'{value}' has more than two decimal places")
     try:
         cents = int((Decimal(text) * 100).quantize(Decimal("1")))
     except InvalidOperation as exc:
@@ -178,7 +182,6 @@ def apply_mapping(headers, records, mapping, date_format=None, flip_sign=False):
             description=cell(record, "description")[:300],
             memo=cell(record, "memo")[:300],
             check_number=cell(record, "check_number")[:20],
-            category=cell(record, "category")[:100],
         )
         try:
             row.date = parse_date(cell(record, "date"), date_format)
@@ -188,9 +191,9 @@ def apply_mapping(headers, records, mapping, date_format=None, flip_sign=False):
             if "amount" in mapping:
                 amount = parse_amount(cell(record, "amount"))
             else:
-                out = parse_amount(cell(record, "withdrawal")) or 0
-                into = parse_amount(cell(record, "deposit")) or 0
-                amount = into - abs(out) if (out or into) else None
+                out = parse_amount(cell(record, "withdrawal"))
+                into = parse_amount(cell(record, "deposit"))
+                amount = None if out is None and into is None else (into or 0) - abs(out or 0)
             if amount is None:
                 row.errors.append("missing amount")
             else:
@@ -204,8 +207,10 @@ def apply_mapping(headers, records, mapping, date_format=None, flip_sign=False):
     return rows
 
 
-def parse_ofx(raw):
-    """Parse OFX/QFX (v1 SGML or v2 XML). Returns (account_id_last4, rows)."""
+def parse_ofx(raw, want_last4=""):
+    """Parse OFX/QFX (v1 SGML or v2 XML). Returns (account_id_last4, rows).
+
+    A file with several accounts uses the one ending in `want_last4` (else the first)."""
     from ofxtools.Parser import OFXTree
 
     if len(raw) > MAX_FILE_BYTES:
@@ -219,11 +224,21 @@ def parse_ofx(raw):
     statements = list(getattr(ofx, "statements", []) or [])
     if not statements:
         raise ParseError("That file doesn't contain a bank statement.")
-    stmt = statements[0]
-    acct_id = str(getattr(getattr(stmt, "account", None), "acctid", "") or "")
+
+    def acct_of(st):
+        return str(getattr(getattr(st, "account", None), "acctid", "") or "")
+
+    stmt = next((st for st in statements if want_last4 and acct_of(st).endswith(want_last4)), statements[0])
+    acct_id = acct_of(stmt)
+    txns = list(stmt.banktranlist or [])
+    if len(txns) > MAX_ROWS:
+        raise ParseError(f"Too many transactions (max {MAX_ROWS}).")
     rows = []
-    for n, txn in enumerate(stmt.banktranlist or [], start=1):
-        posted = txn.dtposted.date() if isinstance(txn.dtposted, datetime) else txn.dtposted
+    for n, txn in enumerate(txns, start=1):
+        posted = txn.dtposted
+        if isinstance(posted, datetime):
+            # OFX times are usually UTC; use the HOA's local date so a 7pm Dec 31 item stays in December.
+            posted = timezone.localtime(posted).date() if timezone.is_aware(posted) else posted.date()
         description = " ".join(p for p in (txn.name or "", txn.memo or "") if p).strip() or (
             txn.trntype or ""
         )
