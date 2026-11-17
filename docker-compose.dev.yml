@@ -3,7 +3,6 @@
 # Uses the same .env file. For day-to-day development without Docker, see the README.
 
 x-porchlight: &porchlight
-  build: .
   image: porchlight:dev
   env_file: .env
   environment:
@@ -14,12 +13,16 @@ x-porchlight: &porchlight
 services:
   web:
     <<: *porchlight
+    build: .
     command: web
     ports:
-      - "${PORCHLIGHT_PORT:-8000}:8000"
+      # Only this computer can reach the port; the reverse proxy forwards to it. See
+      # PORCHLIGHT_BIND in .env.example to open it to your network.
+      - "${PORCHLIGHT_BIND:-127.0.0.1}:${PORCHLIGHT_PORT:-8000}:8000"
 
   scheduler:
     <<: *porchlight
+    pull_policy: never  # uses the image the web service builds
     command: scheduler
 
   db:

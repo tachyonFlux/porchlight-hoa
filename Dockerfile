@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1
 FROM python:3.12-slim-bookworm
 
+ARG PORCHLIGHT_VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/tachyonFlux/porchlight-hoa" \
+      org.opencontainers.image.version="${PORCHLIGHT_VERSION}"
+
 COPY --from=ghcr.io/astral-sh/uv:0.12.0 /uv /usr/local/bin/uv
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,7 +15,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH="/app/.venv/bin:$PATH" \
     DJANGO_SETTINGS_MODULE=porchlight.settings \
-    PORCHLIGHT_DATA_DIR=/data
+    PORCHLIGHT_DATA_DIR=/data \
+    PORCHLIGHT_VERSION=${PORCHLIGHT_VERSION}
 
 # WeasyPrint (PDFs) needs Pango; fonts for invoices and reports.
 RUN apt-get update \

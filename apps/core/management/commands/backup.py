@@ -13,6 +13,6 @@ class Command(BaseCommand):
                 "  docker compose exec db pg_dump -U porchlight porchlight > porchlight.sql"
             )
             return
-        # keep=0 here means "don't prune": a manual backup never deletes older ones.
-        path = backup.backup_sqlite(keep=0)
+        # Named manual-…, so the daily clean-up never deletes it.
+        path = backup.backup_sqlite(keep=0, prefix="manual")
         self.stdout.write(self.style.SUCCESS(f"Backed up to {path}"))

@@ -9,17 +9,28 @@ DATA_DIR="${PORCHLIGHT_DATA_DIR:-/data}"
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 
+HEARTBEAT="${PORCHLIGHT_HEARTBEAT_FILE:-/tmp/porchlight-scheduler-heartbeat}"
+ROLE_FILE=/tmp/porchlight-role
+
 # Start as root only long enough to make the data folder writable, then drop privileges.
-if [ "$(id -u)" = "0" ] && [ "$PUID" != "0" ]; then
-    mkdir -p "$DATA_DIR"
-    if [ "$(stat -c %u:%g "$DATA_DIR")" != "$PUID:$PGID" ]; then
-        echo "Setting owner of $DATA_DIR to $PUID:$PGID"
-        chown -R "$PUID:$PGID" "$DATA_DIR" || echo "Warning: couldn't change owner of $DATA_DIR" >&2
+if [ "$(id -u)" = "0" ]; then
+    if [ "$PUID" = "0" ]; then
+        echo "Warning: PUID=0 runs Porchlight as root. Set PUID and PGID to a regular user's IDs." >&2
+    else
+        mkdir -p "$DATA_DIR"
+        # Fix anything owned by someone else (e.g. files created from a root terminal or
+        # restored with sudo), and keep the data private to that user.
+        if [ -n "$(find "$DATA_DIR" \( ! -user "$PUID" -o ! -group "$PGID" -o -perm /077 \) -print -quit)" ]; then
+            echo "Setting owner of $DATA_DIR to $PUID:$PGID and making it private"
+            chown -R "$PUID:$PGID" "$DATA_DIR" || echo "Warning: couldn't change owner of $DATA_DIR" >&2
+            chmod -R go-rwx "$DATA_DIR" || echo "Warning: couldn't change permissions of $DATA_DIR" >&2
+        fi
+        exec gosu "$PUID:$PGID" "$0" "$@"
     fi
-    exec gosu "$PUID:$PGID" "$0" "$@"
 fi
 
-umask 027
+# Residents' data: readable only by the owner.
+umask 077
 
 wait_for_database() {
     tries=0
@@ -35,9 +46,12 @@ wait_for_database() {
 
 role="${1:-web}"
 [ "$#" -gt 0 ] && shift
+# The health check reads this to know what to check.
+echo "$role" > "$ROLE_FILE" 2>/dev/null || true
 
 case "$role" in
     web)
+        echo "Starting Porchlight ${PORCHLIGHT_VERSION:-dev}"
         wait_for_database
         python manage.py migrate --noinput
         python manage.py show_setup_token
@@ -48,13 +62,16 @@ case "$role" in
             --timeout 120 \
             --max-requests 2000 --max-requests-jitter 200 \
             --access-logfile - \
+            --logger-class apps.core.logredact.RedactingLogger \
             "$@"
         ;;
     scheduler)
+        touch "$HEARTBEAT" 2>/dev/null || true
         wait_for_database
         # The web container runs migrations; wait until they're done.
         tries=0
         until python manage.py migrate --check >/dev/null 2>&1; do
+            touch "$HEARTBEAT" 2>/dev/null || true
             tries=$((tries + 1))
             if [ "$tries" -ge 150 ]; then
                 echo "Database migrations haven't finished; is the web container running?" >&2

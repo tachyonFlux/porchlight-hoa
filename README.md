@@ -95,7 +95,8 @@ shared folder others can read.
 
 Container Manager downloads the image and starts two containers:
 
-- **web**: the website, on port 8000.
+- **web**: the website, on port 8000. Only the NAS itself can reach that port; the reverse
+  proxy in the next step makes it available over HTTPS.
 - **scheduler**: runs daily invoices, reminders, cleanups and backups.
 
 On first start the web container sets up the database and prints a **setup token** in its
@@ -117,7 +118,9 @@ log. You'll need this token in [First-run setup](#first-run-setup).
 5. Keep `PORCHLIGHT_BEHIND_PROXY=1` and `PORCHLIGHT_TRUSTED_PROXY_COUNT=1` in `.env`. If
    Cloudflare's proxy also sits in front of the NAS, use `2`.
 
-Only expose Porchlight through the reverse proxy. Don't forward port 8000 on your router.
+Only expose Porchlight through the reverse proxy. Don't forward port 8000 on your router. If
+Cloudflare's proxy is in front, accept connections to the NAS from Cloudflare's addresses
+only; otherwise visitors can bypass it and fake their IP address.
 
 **Uploads:** the reverse proxy must accept requests as large as `PORCHLIGHT_MAX_REQUEST_MB`
 (default 60 MB, enough for several phone photos at once). If large uploads fail with
@@ -184,7 +187,7 @@ Everything Porchlight stores is in the `data` folder:
 | Path | What it is |
 | --- | --- |
 | `data/db.sqlite3` (plus `-wal`, `-shm`) | The live database. Don't copy it while running. |
-| `data/backups/` | Consistent daily copies of the database, made by the scheduler (the newest 14 are kept). |
+| `data/backups/` | Consistent copies of the database: `db-…` daily ones from the scheduler (the newest 14 are kept) and `manual-…` ones you make, which are never deleted automatically. |
 | `data/media/` | Uploaded documents, photos and attachments. |
 | `.env` | Your settings and secrets. |
 
@@ -195,9 +198,16 @@ Restore from `data/backups`, not from a copy of the live `db.sqlite3`.
 
 **Make a backup now,** for example before an upgrade:
 
-```sh
-docker compose run --rm web manage backup
-```
+- **Without a terminal:** stop the project (Container Manager → Project → porchlight →
+  **Stop**). While it's stopped, the live files are safe to copy: in File Station, copy
+  `data/db.sqlite3` (and `-wal`, `-shm` if present) somewhere else. Then start it again.
+- **With a terminal:** `docker compose run --rm web manage backup` writes a
+  `manual-…` copy to `data/backups`. On a Synology, run it over SSH with `sudo`, in
+  `/volume1/docker/porchlight`.
+
+Always run commands through `manage …` as above. A plain `python manage.py …` in a
+container terminal runs as root, and the files it creates can't be written by Porchlight
+until the next restart fixes their owner.
 
 **Restore:**
 
@@ -216,17 +226,18 @@ Keep a copy of `.env`. If you use SimpleFIN, the saved bank connection can only 
 New versions apply their database changes automatically when the web container starts.
 
 1. Make a backup (see above).
-2. **On a Synology:** go to **Container Manager → Project → porchlight → Action → Stop**,
-   then **Action → Build**. This downloads the newer image and recreates the containers.
+2. **On a Synology:** go to **Container Manager → Project → porchlight → Action → Stop**.
+   Then go to **Image**, select `tachyonflux/porchlight` and choose **Update** (shown when
+   a newer version exists). Back in **Project**, choose **Action → Build** to recreate the
+   containers with it. If the version in the web log hasn't changed, use **Action → Clean**
+   and then **Build**; your `data` folder isn't touched.
    **On Linux:** run `docker compose pull && docker compose up -d`.
 3. Check the web container's log for errors, then sign in.
 
-To stay on a major or minor version, set `PORCHLIGHT_IMAGE` in `.env`. For example,
-`PORCHLIGHT_IMAGE=DOCKERHUB_USERNAME/porchlight:1.2` gets fixes but no new features. Read the
-release notes before moving to a new minor version.
-
-> **Note:** the Docker Hub account name (`DOCKERHUB_USERNAME`) will be filled in when the
-> first release is published.
+To stay on a minor version, set `PORCHLIGHT_IMAGE` in `.env`. For example,
+`PORCHLIGHT_IMAGE=tachyonflux/porchlight:1.2` gets fixes but no new features. Read the
+release notes before moving to a new minor version. The same images are also published as
+`ghcr.io/tachyonflux/porchlight`.
 
 ## Configuration reference
 
@@ -257,8 +268,8 @@ POSTGRES_PASSWORD=a-long-random-password
 DATABASE_URL=postgres://porchlight:a-long-random-password@db:5432/porchlight
 ```
 
-Then start with the `postgres` profile: `docker compose --profile postgres up -d`. Its data
-lives in `./postgres`. The daily SQLite copies don't apply to PostgreSQL. Back it up with
+Also add `COMPOSE_PROFILES=postgres` to `.env`, so the database container starts with the
+others (this works in Container Manager too). Its data lives in `./postgres`. The daily SQLite copies don't apply to PostgreSQL. Back it up with
 `docker compose exec db pg_dump -U porchlight porchlight > porchlight.sql`, for example from a
 scheduled task, and include that file in Hyper Backup.
 
@@ -290,6 +301,12 @@ The saved connection is encrypted with that key. Keep a copy of the key with you
 
 - **Keep the database on the NAS's own disk.** `data` must be on a local volume such as
   `/volume1`, not a network share (SMB/NFS). SQLite can corrupt data on network file systems.
+- **The port is private by default.** It only listens on the NAS itself
+  (`PORCHLIGHT_BIND=127.0.0.1`). Anyone who could reach it directly could skip the proxy
+  and fake their IP address, so open it to your network only for testing.
+- **Data files are private.** Files in `data` can only be read by the `PUID` user, even
+  though Synology's `users` group (`PGID=100`) includes every account on the NAS.
+- **Sign-in and share links are hidden in logs.** The access log shows them as `…`.
 - **The setup token appears in logs.** It only matters until setup is finished, after which
   it's deleted. Anyone who can read your container logs before then could use it.
 - **The proxy count matters.** `PORCHLIGHT_TRUSTED_PROXY_COUNT` must match the number of
@@ -309,7 +326,10 @@ The saved connection is encrypted with that key. Keep a copy of the key with you
 ## Troubleshooting
 
 - **"Bad Request (400)":** the address you used isn't allowed. Check `PORCHLIGHT_BASE_URL`.
-  To use the NAS's IP address directly, add it to `PORCHLIGHT_ALLOWED_HOSTS`.
+  To use the NAS's IP address directly (for testing), set `PORCHLIGHT_BIND=0.0.0.0` and add
+  the address to `PORCHLIGHT_ALLOWED_HOSTS`.
+- **The scheduler shows "unhealthy":** check its log. It waits for the web container to
+  finish setting up the database, so start the web container first.
 - **"CSRF verification failed" when submitting forms:** `PORCHLIGHT_BASE_URL` must match the
   address in your browser exactly, including `https://`. If your proxy doesn't send
   `X-Forwarded-Proto`, add it as a custom header (in DSM: reverse-proxy entry → **Custom

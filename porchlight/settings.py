@@ -235,7 +235,8 @@ OTP_TOTP_ISSUER = env("PORCHLIGHT_OTP_ISSUER", "Porchlight")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "filters": {"redact_tokens": {"()": "apps.core.logredact.RedactTokensFilter"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "filters": ["redact_tokens"]}},
     "root": {"handlers": ["console"], "level": env("PORCHLIGHT_LOG_LEVEL", "INFO")},
     "loggers": {
         "django.db.backends": {"level": "WARNING"},

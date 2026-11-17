@@ -3,6 +3,7 @@
 import logging
 import os
 import signal
+import threading
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -48,6 +49,27 @@ def _heartbeat():
         pass
 
 
+class _KeepAlive:
+    """Keep the heartbeat fresh while daily tasks run (PDFs and email for every home can take
+    a while on a small NAS), up to a limit so a truly stuck run still shows as unhealthy."""
+
+    def __init__(self, limit_seconds=3 * 3600):
+        self.limit = limit_seconds
+        self.done = threading.Event()
+
+    def __enter__(self):
+        def beat():
+            deadline = time.monotonic() + self.limit
+            while not self.done.wait(60) and time.monotonic() < deadline:
+                _heartbeat()
+
+        threading.Thread(target=beat, daemon=True).start()
+        return self
+
+    def __exit__(self, *exc):
+        self.done.set()
+
+
 class Command(BaseCommand):
     help = "Run daily_tasks every day at PORCHLIGHT_DAILY_TASKS_HOUR (local time, default 6)."
 
@@ -61,13 +83,15 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, _stop)
         signal.signal(signal.SIGINT, _stop)
         self.stdout.write(f"Scheduler started; daily tasks run at {hour:02d}:00 local time.")
+        _heartbeat()
 
         while not stop["flag"]:
             # Drop stale/broken connections (e.g. Postgres restarted) before each check.
             close_old_connections()
             try:
                 if should_run(timezone.localtime(), hour):
-                    run = run_daily_tasks()
+                    with _KeepAlive():
+                        run = run_daily_tasks()
                     if run is not None:
                         status = "ok" if run.ok else "with errors"
                         self.stdout.write(f"{timezone.localtime():%Y-%m-%d %H:%M} daily tasks {status}")

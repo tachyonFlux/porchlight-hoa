@@ -1,20 +1,24 @@
-.git
-.github
-.venv
-__pycache__
-*.pyc
-.pytest_cache
-.ruff_cache
-data
-media
-staticfiles
-.env
-.env.*
-!.env.example
-*.sqlite3
-*.csv
-*.ofx
-*.qfx
-!**/tests/fixtures/*
-HANDOFF.md
-docker-compose*.yml
+# Allowlist: only the source the image needs goes into the build. Everything else (.env,
+# data/, postgres/, imports, bank exports, databases, notes) stays out, wherever it is.
+*
+!apps/
+!porchlight/
+!templates/
+!static/
+!docker/
+!manage.py
+!pyproject.toml
+!uv.lock
+!.python-version
+!LICENSE
+!README.md
+
+# Even inside the allowed folders: no caches, databases, exports or real data.
+**/__pycache__
+**/*.py[cod]
+**/*.sqlite3*
+**/*.db
+**/*.csv
+**/*.ofx
+**/*.qfx
+!apps/*/tests/fixtures/**

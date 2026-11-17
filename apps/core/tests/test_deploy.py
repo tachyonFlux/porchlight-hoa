@@ -38,7 +38,26 @@ def test_manual_backup_never_prunes(sqlite_file, tmp_path):
     for day in range(1, 4):
         backup.backup_sqlite(keep=1, now=datetime(2026, 1, day))
     call_command("backup")
-    assert len(list((tmp_path / "backups").glob("db-*.sqlite3"))) == 2
+    assert len(list((tmp_path / "backups").glob("db-*.sqlite3"))) == 1
+    manual = list((tmp_path / "backups").glob("manual-*.sqlite3"))
+    assert len(manual) == 1
+    # Later daily backups don't delete the manual one.
+    backup.backup_sqlite(keep=1, now=datetime(2026, 2, 1))
+    assert list((tmp_path / "backups").glob("manual-*.sqlite3")) == manual
+
+
+def test_stale_partial_files_are_removed(sqlite_file, tmp_path):
+    (tmp_path / "backups").mkdir()
+    (tmp_path / "backups" / "db-20250101-000000.partial").write_text("half")
+    backup.backup_sqlite(keep=5, now=datetime(2026, 1, 1))
+    assert not list((tmp_path / "backups").glob("*.partial"))
+
+
+def test_failed_backup_leaves_no_partial(sqlite_file, tmp_path, monkeypatch):
+    monkeypatch.setattr(backup, "_db_path", lambda: str(tmp_path / "missing" / "nope.sqlite3"))
+    with pytest.raises(sqlite3.Error):
+        backup.backup_sqlite(keep=5, now=datetime(2026, 1, 1))
+    assert not list((tmp_path / "backups").glob("*"))
 
 
 def test_daily_task_backs_up(sqlite_file, tmp_path, settings):
