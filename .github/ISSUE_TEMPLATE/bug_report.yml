@@ -1,0 +1,56 @@
+name: Bug report
+description: Something isn't working the way the docs say it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. **Please don't include real residents' names, addresses,
+        bank details, passwords, the setup token or your secret key.** Replace them with made-up
+        values. Found a security problem? Don't open an issue; see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to Finances → Import
+        2. Upload a CSV with ...
+        3. See the error ...
+  - type: input
+    id: version
+    attributes:
+      label: Porchlight version
+      description: The image tag you're running (for example 1.2.0), or the commit if you built it yourself.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is it installed?
+      options:
+        - Synology Container Manager
+        - Docker Compose on Linux
+        - Other Docker host
+        - From source (development)
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - SQLite (default)
+        - PostgreSQL
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant part of the web or scheduler container's log. Check it for personal details first.
+      render: text

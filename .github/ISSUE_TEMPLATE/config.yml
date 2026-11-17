@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/tachyonFlux/porchlight-hoa/security/advisories/new
+    about: Please don't open a public issue for security problems.
+  - name: Installation help
+    url: https://github.com/tachyonFlux/porchlight-hoa#troubleshooting
+    about: Check the README's troubleshooting section first.

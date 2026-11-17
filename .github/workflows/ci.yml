@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install WeasyPrint system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.0"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Check for missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run --settings=porchlight.settings_test
+
+      - name: Test
+        run: uv run pytest
+
+  docker:
+    name: Build and start the image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: porchlight:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start it and wait for it to be healthy
+        run: |
+          mkdir -p data
+          docker run -d --name porchlight-ci -p 8000:8000 -v "$PWD/data:/data" \
+            -e PORCHLIGHT_SECRET_KEY=ci-only-not-secret \
+            -e PORCHLIGHT_BASE_URL=http://localhost:8000 \
+            -e PUID="$(id -u)" -e PGID="$(id -g)" \
+            porchlight:ci
+          for i in $(seq 1 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' porchlight-ci)
+            [ "$status" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Running}}' porchlight-ci)" = true ] || break
+            sleep 3
+          done
+          docker logs porchlight-ci
+          test "$(docker inspect -f '{{.State.Health.Status}}' porchlight-ci)" = healthy
+          curl -fsS -o /dev/null http://localhost:8000/healthz
+          curl -fsS -o /dev/null -L http://localhost:8000/
+          docker logs porchlight-ci 2>&1 | grep -q "setup token"
+          test "$(stat -c %u data/db.sqlite3)" = "$(id -u)"
+
+      - name: Run the scheduler and a backup
+        run: |
+          docker run --rm -v "$PWD/data:/data" -e PORCHLIGHT_SECRET_KEY=ci-only-not-secret \
+            -e PUID="$(id -u)" -e PGID="$(id -g)" porchlight:ci manage backup
+          ls -l data/backups

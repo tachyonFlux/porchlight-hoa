@@ -1,5 +1,7 @@
 # Porchlight
 
+[![CI](https://github.com/tachyonFlux/porchlight-hoa/actions/workflows/ci.yml/badge.svg)](https://github.com/tachyonFlux/porchlight-hoa/actions/workflows/ci.yml)
+
 Self-hosted, open-source management for self-managed homeowners associations. It runs in
 Docker on a small server or NAS (a Synology works well), and residents use it from their
 phones.
@@ -38,6 +40,7 @@ phones.
 11. [Security notes](#security-notes)
 12. [Troubleshooting](#troubleshooting)
 13. [Development](#development)
+14. [Contributing](#contributing)
 
 ---
 
@@ -370,6 +373,11 @@ To build and run the Docker image from source instead of pulling it:
 cp .env.example .env    # fill it in; for http://localhost testing also set PORCHLIGHT_SECURE_COOKIES=0
 docker compose -f docker-compose.dev.yml up --build
 ```
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Please report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
