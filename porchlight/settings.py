@@ -11,7 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def env(name, default=None):
-    return os.environ.get(name, default)
+    # Strip stray whitespace, including the "\r" a .env saved with Windows line endings leaves.
+    value = os.environ.get(name)
+    return default if value is None else value.strip()
 
 
 def env_bool(name, default=False):

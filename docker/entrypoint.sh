@@ -6,8 +6,9 @@
 set -eu
 
 DATA_DIR="${PORCHLIGHT_DATA_DIR:-/data}"
-PUID="${PUID:-1000}"
-PGID="${PGID:-1000}"
+# tr: ignore stray spaces and the "\r" left by a .env saved with Windows line endings.
+PUID="$(printf %s "${PUID:-1000}" | tr -d ' \r')"
+PGID="$(printf %s "${PGID:-1000}" | tr -d ' \r')"
 
 HEARTBEAT="${PORCHLIGHT_HEARTBEAT_FILE:-/tmp/porchlight-scheduler-heartbeat}"
 ROLE_FILE=/tmp/porchlight-role
