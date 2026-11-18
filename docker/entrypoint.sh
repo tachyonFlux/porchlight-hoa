@@ -33,15 +33,8 @@ fi
 umask 077
 
 wait_for_database() {
-    tries=0
-    until python -c "import django; django.setup(); from django.db import connection; connection.ensure_connection()" 2>/dev/null; do
-        tries=$((tries + 1))
-        if [ "$tries" -ge 60 ]; then
-            echo "Can't reach the database; check DATABASE_URL." >&2
-            exit 1
-        fi
-        sleep 2
-    done
+    # Prints the actual reason and exits if the database can't be used.
+    python "$(dirname "$0")/wait_for_db.py"
 }
 
 role="${1:-web}"

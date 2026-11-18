@@ -45,6 +45,38 @@ jobs:
       - name: Test
         run: uv run pytest
 
+  postgres:
+    name: PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: porchlight
+          POSTGRES_USER: porchlight
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U porchlight" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: porchlight.settings
+      DATABASE_URL: postgres://porchlight:ci-only@localhost:5432/porchlight
+      PORCHLIGHT_SECRET_KEY: ci-only-not-secret
+      PORCHLIGHT_DATA_DIR: ${{ github.workspace }}/ci-data
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Connect, migrate and load demo data
+        run: |
+          uv run python docker/wait_for_db.py
+          uv run python manage.py migrate --noinput
+          uv run python manage.py seed_demo --allow-production
+          uv run python manage.py check --deploy --fail-level ERROR
+
   docker:
     name: Build and start the image
     runs-on: ubuntu-latest
@@ -82,6 +114,12 @@ jobs:
           curl -fsS -o /dev/null -L http://localhost:8000/
           docker logs porchlight-ci 2>&1 | grep -q "setup token"
           test "$(stat -c %u data/db.sqlite3)" = "$(id -u)"
+
+      - name: A missing setting gives a clear message
+        run: |
+          out=$(docker run --rm -v "$PWD/data:/data" -e PUID="$(id -u)" -e PGID="$(id -g)" porchlight:ci 2>&1 || true)
+          echo "$out"
+          echo "$out" | grep -q "Set PORCHLIGHT_SECRET_KEY"
 
       - name: Run the scheduler and a backup
         run: |
