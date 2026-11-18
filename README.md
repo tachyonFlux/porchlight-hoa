@@ -115,7 +115,8 @@ log. You'll need this token in [First-run setup](#first-run-setup).
 3. **Reverse proxy:** go to **Control Panel → Login Portal → Advanced → Reverse Proxy →
    Create** and fill in:
    - **Source:** protocol `HTTPS`, hostname `hoa.example.com`, port `443`. Tick **Enable HSTS**.
-   - **Destination:** protocol `HTTP`, hostname `localhost`, port `8000`.
+   - **Destination:** protocol `HTTP`, hostname `127.0.0.1`, port `8000`. Use `127.0.0.1`
+     rather than `localhost`, which can mean the IPv6 address that Porchlight doesn't listen on.
 4. **Assign the certificate:** go back to **Certificate → Settings** and choose the new
    certificate for the `hoa.example.com` reverse-proxy entry.
 5. Keep `PORCHLIGHT_BEHIND_PROXY=1` and `PORCHLIGHT_TRUSTED_PROXY_COUNT=1` in `.env`. If
@@ -147,7 +148,7 @@ With Caddy, two lines are enough:
 
 ```
 hoa.example.com {
-    reverse_proxy localhost:8000
+    reverse_proxy 127.0.0.1:8000
 }
 ```
 
@@ -331,6 +332,11 @@ The saved connection is encrypted with that key. Keep a copy of the key with you
 - **"Bad Request (400)":** the address you used isn't allowed. Check `PORCHLIGHT_BASE_URL`.
   To use the NAS's IP address directly (for testing), set `PORCHLIGHT_BIND=0.0.0.0` and add
   the address to `PORCHLIGHT_ALLOWED_HOSTS`.
+- **The site doesn't load through the reverse proxy:** check that the web container is
+  running and healthy, and that the proxy's destination is `127.0.0.1` port `8000` (not
+  `localhost`). Over SSH, `curl -i http://127.0.0.1:8000/healthz` on the NAS should answer
+  `ok`. Opening `http://NAS-IP:8000` from another computer doesn't work by design (see
+  `PORCHLIGHT_BIND`).
 - **The scheduler shows "unhealthy":** check its log. It waits for the web container to
   finish setting up the database, so start the web container first.
 - **"CSRF verification failed" when submitting forms:** `PORCHLIGHT_BASE_URL` must match the
