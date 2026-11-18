@@ -26,7 +26,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.0"
           enable-cache: true
@@ -65,7 +65,7 @@ jobs:
       PORCHLIGHT_DATA_DIR: ${{ github.workspace }}/ci-data
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.0"
           enable-cache: true
