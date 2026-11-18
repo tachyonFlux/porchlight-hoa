@@ -18,7 +18,7 @@ jobs:
     name: Lint and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install WeasyPrint system libraries
         run: |
@@ -64,7 +64,7 @@ jobs:
       PORCHLIGHT_SECRET_KEY: ci-only-not-secret
       PORCHLIGHT_DATA_DIR: ${{ github.workspace }}/ci-data
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.12.0"
@@ -81,7 +81,7 @@ jobs:
     name: Build and start the image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v3
 
